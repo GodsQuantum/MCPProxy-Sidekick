@@ -12,6 +12,7 @@ import (
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/oauth"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/profiles"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/runtimepriv"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/web"
 )
@@ -32,6 +33,19 @@ func main() {
 	}
 	app := &web.Server{Cfg: cfg}
 	if !cfg.DemoMode {
+		target, err := runtimepriv.FromEnv()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if target != nil {
+			if cfg.MCPProxyAdminKey == "" {
+				log.Fatal("privilege drop requires SIDEKICK_MCPPROXY_CONFIG_FILE so the admin key is loaded before dropping privileges")
+			}
+			if err := runtimepriv.Drop(target); err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Dropped runtime privileges to uid=%d gid=%d", target.UID, target.GID)
+		}
 		var authManager *auth.Manager
 		var proxy *mcpproxy.Client
 		if cfg.MCPProxyAdminKey != "" {
