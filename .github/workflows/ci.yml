@@ -28,6 +28,23 @@ jobs:
         run: go vet ./...
       - name: JavaScript syntax
         run: node --check internal/web/assets/app.js
+      - name: Validate visual assets
+        run: |
+          python3 - <<'PY'
+          import struct
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          for p in (Path("docs/assets/logo.svg"), Path("internal/web/assets/icon.svg")):
+              ET.parse(p)
+              data=p.read_text(encoding="utf-8")
+              assert "<svg" in data and "</svg>" in data, p
+          p=Path("docs/assets/dashboard.png")
+          raw=p.read_bytes()
+          assert raw[:8] == b"\x89PNG\r\n\x1a\n", "invalid PNG signature"
+          w,h=struct.unpack(">II", raw[16:24])
+          assert w >= 1000 and h >= 800, (w,h)
+          print("visual assets OK", w, h)
+          PY
       - name: Privacy scan
         run: ./scripts/privacy-scan.sh
       - name: govulncheck
