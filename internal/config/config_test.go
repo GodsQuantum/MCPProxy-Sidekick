@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestLoadRejectsMissingMCPProxyURL(t *testing.T) {
 	t.Setenv("SIDEKICK_MCPPROXY_URL", "")
@@ -47,5 +51,21 @@ func TestLoadReadsAdapterSettings(t *testing.T) {
 	}
 	if cfg.PostizBaseURL == "" || cfg.PaperlessEndpoint == "" || cfg.ImmichKeyDir == "" || cfg.OmniRouteDB == "" {
 		t.Fatalf("adapter settings missing: %#v", cfg)
+	}
+}
+func TestLoadCanReadAdminKeyFromMCPProxyConfig(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "")
+	p := filepath.Join(t.TempDir(), "mcp_config.json")
+	if err := os.WriteFile(p, []byte(`{"api_key":"config-secret"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SIDEKICK_MCPPROXY_CONFIG_FILE", p)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MCPProxyAdminKey != "config-secret" {
+		t.Fatal("admin key was not loaded from config")
 	}
 }

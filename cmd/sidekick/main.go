@@ -32,11 +32,19 @@ func main() {
 	}
 	app := &web.Server{Cfg: cfg}
 	if !cfg.DemoMode {
-		authManager, err := auth.NewManager(cfg.MCPProxyAdminKeyFile, cfg.SessionLifetime)
-		if err != nil {
-			log.Fatal(err)
+		var authManager *auth.Manager
+		var proxy *mcpproxy.Client
+		if cfg.MCPProxyAdminKey != "" {
+			authManager, err = auth.NewManagerFromKey(cfg.MCPProxyAdminKey, cfg.SessionLifetime)
+			if err == nil {
+				proxy, err = mcpproxy.NewClientWithKey(cfg.MCPProxyBaseURL, cfg.MCPProxyAdminKey)
+			}
+		} else {
+			authManager, err = auth.NewManager(cfg.MCPProxyAdminKeyFile, cfg.SessionLifetime)
+			if err == nil {
+				proxy, err = mcpproxy.NewClient(cfg.MCPProxyBaseURL, cfg.MCPProxyAdminKeyFile)
+			}
 		}
-		proxy, err := mcpproxy.NewClient(cfg.MCPProxyBaseURL, cfg.MCPProxyAdminKeyFile)
 		if err != nil {
 			log.Fatal(err)
 		}

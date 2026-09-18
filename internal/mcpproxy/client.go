@@ -21,6 +21,14 @@ type Client struct {
 }
 
 func NewClient(baseURL, adminKeyFile string) (*Client, error) {
+	raw, err := os.ReadFile(adminKeyFile)
+	if err != nil {
+		return nil, err
+	}
+	return NewClientWithKey(baseURL, string(raw))
+}
+
+func NewClientWithKey(baseURL, rawKey string) (*Client, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		return nil, errors.New("empty MCPProxy base URL")
@@ -28,11 +36,7 @@ func NewClient(baseURL, adminKeyFile string) (*Client, error) {
 	if _, err := url.ParseRequestURI(baseURL); err != nil {
 		return nil, fmt.Errorf("invalid MCPProxy base URL: %w", err)
 	}
-	raw, err := os.ReadFile(adminKeyFile)
-	if err != nil {
-		return nil, err
-	}
-	key := strings.TrimSpace(string(raw))
+	key := strings.TrimSpace(rawKey)
 	if key == "" {
 		return nil, errors.New("empty MCPProxy admin key")
 	}

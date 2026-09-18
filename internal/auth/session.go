@@ -30,7 +30,11 @@ func NewManager(keyFile string, lifetime time.Duration) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	key := []byte(strings.TrimSpace(string(raw)))
+	return NewManagerFromKey(string(raw), lifetime)
+}
+
+func NewManagerFromKey(rawKey string, lifetime time.Duration) (*Manager, error) {
+	key := []byte(strings.TrimSpace(rawKey))
 	if len(key) == 0 {
 		return nil, errors.New("empty MCPProxy admin key")
 	}
