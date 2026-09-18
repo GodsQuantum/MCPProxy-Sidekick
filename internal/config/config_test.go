@@ -34,3 +34,18 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("DBPath = %q", cfg.DBPath)
 	}
 }
+func TestLoadReadsAdapterSettings(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_POSTIZ_BASE_URL", "https://social.example.com/api/mcp")
+	t.Setenv("SIDEKICK_PAPERLESS_ENDPOINT", "http://paperless-mcp:3000/mcp")
+	t.Setenv("SIDEKICK_IMMICH_KEY_DIR", "/run/immich-keys")
+	t.Setenv("SIDEKICK_OMNIROUTE_DB", "/run/omniroute/storage.sqlite")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PostizBaseURL == "" || cfg.PaperlessEndpoint == "" || cfg.ImmichKeyDir == "" || cfg.OmniRouteDB == "" {
+		t.Fatalf("adapter settings missing: %#v", cfg)
+	}
+}

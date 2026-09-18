@@ -21,6 +21,7 @@ type Config struct {
 	PostizBaseURL        string
 	PaperlessEndpoint    string
 	ImmichKeyDir         string
+	OmniRouteDB          string
 	DemoMode             bool
 }
 
@@ -39,6 +40,10 @@ func Load() (Config, error) {
 		SessionLifetime:      lifetime,
 		OAuthCDPURL:          envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
 		OAuthBrowserURL:      envOr("SIDEKICK_OAUTH_BROWSER_URL", "/oauth-browser/"),
+		PostizBaseURL:        strings.TrimSpace(os.Getenv("SIDEKICK_POSTIZ_BASE_URL")),
+		PaperlessEndpoint:    strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
+		ImmichKeyDir:         strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
+		OmniRouteDB:          strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
 		DemoMode:             parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
 	}
 	if cfg.DemoMode {

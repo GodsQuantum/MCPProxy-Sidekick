@@ -7,6 +7,7 @@ import (
 	"time"
 
 	immichadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/immich"
+	omnirouteadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/omniroute"
 	paperlessadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/paperless"
 	postizadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/postiz"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
@@ -63,6 +64,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
 		"summary":   map[string]int{"total": len(safe), "connected": connected, "tools": tools, "auth_required": authNeeded, "quarantined": quarantined},
 		"upstreams": safe, "profiles": ps, "tokens": toks, "csrf": r.Header.Get("X-Sidekick-CSRF-Expected"),
+		"capabilities": map[string]bool{"omniroute_restore_master": strings.TrimSpace(s.Cfg.OmniRouteDB) != ""},
 	})
 }
 
@@ -101,6 +103,19 @@ func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.Profiles.UpsertCredentialMeta(profiles.CredentialMeta{ServerName: name, MaskedPreview: credentials.Mask(req.Value), Fingerprint: credentials.Fingerprint(req.Value), UpdatedAt: time.Now().UTC().Format(time.RFC3339)})
 	writeJSON(w, 200, map[string]any{"ok": true, "preview": credentials.Mask(req.Value)})
+}
+
+func (s *Server) handleOmniRouteRestoreMaster(w http.ResponseWriter, r *http.Request) {
+	if strings.TrimSpace(s.Cfg.OmniRouteDB) == "" {
+		writeError(w, 400, "OmniRoute database is not configured")
+		return
+	}
+	adapter := omnirouteadapter.Adapter{Editor: s.Proxy, DBPath: s.Cfg.OmniRouteDB, ServerName: "omniroute"}
+	if err := adapter.RestoreMaster(r.Context()); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
 func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {

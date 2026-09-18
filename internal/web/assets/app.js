@@ -75,6 +75,7 @@ function serverCard(s,withActions=true){
   let action="";
   if(withActions){
     action=s.oauth?'<button class="secondary oauth-start" data-name="'+esc(s.name)+'">'+(s.authenticated?"Reconnect OAuth":"Connect OAuth")+'</button>':'<button class="secondary credential-open" data-name="'+esc(s.name)+'">Set credential</button>';
+    if(s.name==="omniroute" && state.data?.capabilities?.omniroute_restore_master){ action+='<button class="secondary omni-restore">Restore existing Master</button>'; }
   }
   return '<article class="server-card" data-name="'+esc(s.name)+'"><div class="server-top"><div><h3>'+esc(s.name)+'</h3><span class="muted">'+esc(profileLabel(s.profile))+'</span></div>'+badge(s.status,s.enabled,s.quarantined)+'</div><div class="server-meta"><span>'+esc(s.protocol||"MCP")+'</span><strong>'+esc(s.tool_count||0)+' tools</strong></div><div class="preview">'+(s.credential_configured?esc(s.credential_preview||"Configured"):"No credential detected")+'</div>'+(withActions?'<div class="card-actions">'+action+'</div>':"")+'</article>';
 }
@@ -103,6 +104,15 @@ function renderAttention(){
 function wireServerActions(root){
   $$(".oauth-start",root).forEach(b=>b.onclick=()=>startOAuth(b.dataset.name));
   $$(".credential-open",root).forEach(b=>b.onclick=()=>openCredential(b.dataset.name));
+  $$(".omni-restore",root).forEach(b=>b.onclick=restoreOmniRouteMaster);
+}
+
+async function restoreOmniRouteMaster(){
+  try{
+    await api("/api/adapters/omniroute/restore-master",{method:"POST",body:"{}"});
+    toast("OmniRoute Master assigned to MCPProxy");
+    await load();
+  }catch(e){toast(e.message)}
 }
 
 async function startOAuth(name){

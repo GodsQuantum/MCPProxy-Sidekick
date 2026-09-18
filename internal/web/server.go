@@ -57,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/state", s.requireSession(s.handleState))
 	mux.HandleFunc("POST /api/upstreams/{name}/credential", s.requireSession(s.requireMutation(s.handleCredential)))
 	mux.HandleFunc("POST /api/upstreams/{name}/oauth/start", s.requireSession(s.requireMutation(s.handleOAuthStart)))
+	mux.HandleFunc("POST /api/adapters/omniroute/restore-master", s.requireSession(s.requireMutation(s.handleOmniRouteRestoreMaster)))
 	mux.HandleFunc("POST /api/profiles", s.requireSession(s.requireMutation(s.handleProfile)))
 	mux.HandleFunc("POST /api/profiles/{id}/servers", s.requireSession(s.requireMutation(s.handleProfileServer)))
 	mux.HandleFunc("POST /api/tokens", s.requireSession(s.requireMutation(s.handleTokenCreate)))

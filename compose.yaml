@@ -21,6 +21,7 @@ services:
       SIDEKICK_POSTIZ_BASE_URL: "${SIDEKICK_POSTIZ_BASE_URL:-}"
       SIDEKICK_PAPERLESS_ENDPOINT: "${SIDEKICK_PAPERLESS_ENDPOINT:-}"
       SIDEKICK_IMMICH_KEY_DIR: "/run/immich-keys"
+      SIDEKICK_OMNIROUTE_DB: "${SIDEKICK_OMNIROUTE_DB:-}"
     volumes:
       - sidekick-data:/data
       - ./secrets/mcpproxy_admin_key:/run/secrets/mcpproxy_admin_key:ro

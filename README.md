@@ -187,6 +187,7 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_SESSION_LIFETIME | 720h | Admin session lifetime. |
 | SIDEKICK_POSTIZ_BASE_URL | empty | Optional Postiz MCP base URL for URL-key auth. |
 | SIDEKICK_PAPERLESS_ENDPOINT | empty | Optional shared Paperless MCP endpoint. |
+| SIDEKICK_OMNIROUTE_DB | empty | Optional read-only OmniRoute SQLite path used to restore the active Master key. |
 | PUID / PGID | 1000 / 1000 | LinuxServer Chromium profile ownership. |
 | TZ | UTC | OAuth browser timezone. |
 
