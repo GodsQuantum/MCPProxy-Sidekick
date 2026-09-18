@@ -98,3 +98,80 @@ func TestOAuthBrowserAuthCheckRejectsAnonymous(t *testing.T) {
 		t.Fatalf("status=%d", rw.Code)
 	}
 }
+
+func TestStateDegradesInsteadOfReturning502(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		failServers bool
+		failTokens  bool
+		wantWarning string
+	}{
+		{name: "tokens unavailable", failTokens: true, wantWarning: "Agent Tokens are temporarily unavailable"},
+		{name: "servers unavailable", failServers: true, wantWarning: "server inventory is temporarily unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			keyFile := filepath.Join(t.TempDir(), "admin-key")
+			if err := os.WriteFile(keyFile, []byte("admin-key\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/v1/servers":
+					if tc.failServers {
+						http.Error(w, "boom", http.StatusBadGateway)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"servers": []mcpproxy.Server{}})
+				case "/api/v1/tokens":
+					if tc.failTokens {
+						http.Error(w, "boom", http.StatusBadGateway)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []mcpproxy.AgentToken{}})
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer fake.Close()
+
+			proxy, err := mcpproxy.NewClient(fake.URL, keyFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			authManager, err := auth.NewManager(keyFile, time.Hour)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store, err := profiles.Open(filepath.Join(t.TempDir(), "sidekick.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+
+			app := &Server{
+				Cfg:  config.Config{AllowedHosts: []string{"mcp.example.com"}},
+				Auth: authManager, Proxy: proxy, Profiles: store,
+				Credentials: credentials.Service{Editor: proxy},
+				Tokens:      tokens.Service{Backend: proxy},
+			}
+			h := app.Handler()
+			login := httptest.NewRequest(http.MethodPost, "https://mcp.example.com/api/login", bytes.NewBufferString(`{"key":"admin-key"}`))
+			login.Header.Set("Content-Type", "application/json")
+			lw := httptest.NewRecorder()
+			h.ServeHTTP(lw, login)
+			if lw.Code != http.StatusOK {
+				t.Fatalf("login status=%d body=%s", lw.Code, lw.Body.String())
+			}
+			req := httptest.NewRequest(http.MethodGet, "https://mcp.example.com/api/state", nil)
+			req.AddCookie(lw.Result().Cookies()[0])
+			rw := httptest.NewRecorder()
+			h.ServeHTTP(rw, req)
+			if rw.Code != http.StatusOK {
+				t.Fatalf("state status=%d body=%s", rw.Code, rw.Body.String())
+			}
+			if !strings.Contains(rw.Body.String(), tc.wantWarning) {
+				t.Fatalf("missing degraded warning in body: %s", rw.Body.String())
+			}
+		})
+	}
+}

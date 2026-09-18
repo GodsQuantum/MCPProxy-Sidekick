@@ -1,6 +1,7 @@
 package web
 
 import (
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -20,10 +21,12 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		s.handleDemoState(w)
 		return
 	}
+	warnings := []string{}
 	servers, err := s.Proxy.ListServers(r.Context())
 	if err != nil {
-		writeError(w, 502, err.Error())
-		return
+		log.Printf("sidekick state: MCPProxy server inventory unavailable: %v", err)
+		warnings = append(warnings, "MCPProxy server inventory is temporarily unavailable")
+		servers = nil
 	}
 	ps, err := s.Profiles.ListProfiles()
 	if err != nil {
@@ -32,8 +35,9 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	toks, err := s.Tokens.List(r.Context())
 	if err != nil {
-		writeError(w, 502, err.Error())
-		return
+		log.Printf("sidekick state: MCPProxy Agent Token inventory unavailable: %v", err)
+		warnings = append(warnings, "MCPProxy Agent Tokens are temporarily unavailable")
+		toks = nil
 	}
 	pm := profileMap(ps)
 	safe := make([]safeUpstream, 0, len(servers))
@@ -63,7 +67,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{
 		"summary":   map[string]int{"total": len(safe), "connected": connected, "tools": tools, "auth_required": authNeeded, "quarantined": quarantined},
-		"upstreams": safe, "profiles": ps, "tokens": toks, "csrf": r.Header.Get("X-Sidekick-CSRF-Expected"),
+		"upstreams": safe, "profiles": ps, "tokens": toks, "warnings": warnings, "csrf": r.Header.Get("X-Sidekick-CSRF-Expected"),
 		"capabilities": map[string]bool{"omniroute_restore_master": strings.TrimSpace(s.Cfg.OmniRouteDB) != ""},
 	})
 }

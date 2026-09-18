@@ -44,7 +44,8 @@ async function load(){
     const d=await api("/api/state");
     state.data=d; state.csrf=d.csrf||state.csrf;
     $("#login").hidden=true; $("#app").hidden=false;
-    render(); $("#refresh-state").textContent="Live";
+    render(); $("#refresh-state").textContent=(d.warnings||[]).length?"Degraded":"Live";
+    if((d.warnings||[]).length) toast(d.warnings.join(" · "));
   }catch(e){
     if(/401|authentication/i.test(e.message)){ $("#app").hidden=true; $("#login").hidden=false; }
     else toast(e.message);
@@ -98,8 +99,11 @@ function renderOAuth(){
   wireServerActions($("#oauth-list"));
 }
 function renderAttention(){
+  const warnings=state.data?.warnings||[];
   const list=(state.data?.upstreams||[]).filter(s=>!s.enabled||s.quarantined||!/ready|connected/i.test(s.status||""));
-  $("#attention").innerHTML=list.length?list.map(s=>'<div class="token-row"><div class="token-info"><h3>'+esc(s.name)+'</h3><p>'+esc(s.status||"unknown")+' · '+(s.tool_count||0)+' tools</p></div>'+badge(s.status,s.enabled,s.quarantined)+'</div>').join(""):'<div class="empty">Everything looks healthy.</div>';
+  const warningHtml=warnings.map(w=>'<div class="token-row"><div class="token-info"><h3>Sidekick dependency</h3><p>'+esc(w)+'</p></div><span class="badge warn">Degraded</span></div>').join("");
+  const upstreamHtml=list.map(s=>'<div class="token-row"><div class="token-info"><h3>'+esc(s.name)+'</h3><p>'+esc(s.status||"unknown")+' · '+(s.tool_count||0)+' tools</p></div>'+badge(s.status,s.enabled,s.quarantined)+'</div>').join("");
+  $("#attention").innerHTML=warningHtml+upstreamHtml||(warnings.length||list.length?"":'<div class="empty">Everything looks healthy.</div>');
 }
 
 function wireServerActions(root){
