@@ -1,0 +1,10 @@
+.git
+.worktrees
+.env
+.env.*
+!.env.example
+secrets
+data
+*.db
+*.sqlite*
+docs/assets/*.png

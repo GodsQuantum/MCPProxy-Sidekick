@@ -1,0 +1,56 @@
+name: mcpproxy-sidekick
+
+services:
+  sidekick:
+    image: ghcr.io/godsquantum/mcpproxy-sidekick:latest
+    build:
+      context: .
+    container_name: mcpproxy-sidekick
+    restart: unless-stopped
+    network_mode: "container:${MCPPROXY_CONTAINER_NAME:-mcpproxy}"
+    environment:
+      SIDEKICK_LISTEN_ADDR: ":8081"
+      SIDEKICK_MCPPROXY_URL: "http://127.0.0.1:8080"
+      SIDEKICK_MCPPROXY_ADMIN_KEY_FILE: "/run/secrets/mcpproxy_admin_key"
+      SIDEKICK_PUBLIC_BASE_URL: "${SIDEKICK_PUBLIC_BASE_URL:-https://mcp.example.com/control/}"
+      SIDEKICK_ALLOWED_HOSTS: "${SIDEKICK_ALLOWED_HOSTS:-mcp.example.com}"
+      SIDEKICK_DB_PATH: "/data/sidekick.db"
+      SIDEKICK_OAUTH_CDP_URL: "http://127.0.0.1:9222"
+      SIDEKICK_OAUTH_BROWSER_URL: "/oauth-browser/"
+      SIDEKICK_SESSION_LIFETIME: "${SIDEKICK_SESSION_LIFETIME:-720h}"
+      SIDEKICK_POSTIZ_BASE_URL: "${SIDEKICK_POSTIZ_BASE_URL:-}"
+      SIDEKICK_PAPERLESS_ENDPOINT: "${SIDEKICK_PAPERLESS_ENDPOINT:-}"
+      SIDEKICK_IMMICH_KEY_DIR: "/run/immich-keys"
+    volumes:
+      - sidekick-data:/data
+      - ./secrets/mcpproxy_admin_key:/run/secrets/mcpproxy_admin_key:ro
+      - ./secrets/immich:/run/immich-keys
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  oauth-browser:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: mcpproxy-sidekick-oauth-browser
+    restart: unless-stopped
+    network_mode: "container:${MCPPROXY_CONTAINER_NAME:-mcpproxy}"
+    environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      TZ: "${TZ:-UTC}"
+      SUBFOLDER: "/oauth-browser/"
+      TITLE: "MCPProxy Sidekick OAuth"
+      CHROME_CLI: "--remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 about:blank"
+    volumes:
+      - oauth-browser-data:/config
+    shm_size: 1gb
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  sidekick-data:
+  oauth-browser-data:

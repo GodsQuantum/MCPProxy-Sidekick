@@ -47,6 +47,34 @@ func (s *Store) AssignServer(profileID, server string) error {
 	return err
 }
 
+type CredentialMeta struct {
+	ServerName    string `json:"server_name"`
+	MaskedPreview string `json:"masked_preview"`
+	Fingerprint   string `json:"fingerprint"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+func (s *Store) UpsertCredentialMeta(m CredentialMeta) error {
+	_, err := s.db.Exec(
+		"INSERT INTO credential_meta(server_name,masked_preview,fingerprint,updated_at) VALUES(?,?,?,?) ON CONFLICT(server_name) DO UPDATE SET masked_preview=excluded.masked_preview, fingerprint=excluded.fingerprint, updated_at=excluded.updated_at",
+		m.ServerName, m.MaskedPreview, m.Fingerprint, m.UpdatedAt,
+	)
+	return err
+}
+
+func (s *Store) CredentialMeta(server string) (CredentialMeta, bool, error) {
+	var m CredentialMeta
+	err := s.db.QueryRow("SELECT server_name,masked_preview,fingerprint,updated_at FROM credential_meta WHERE server_name=?", server).
+		Scan(&m.ServerName, &m.MaskedPreview, &m.Fingerprint, &m.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return CredentialMeta{}, false, nil
+	}
+	if err != nil {
+		return CredentialMeta{}, false, err
+	}
+	return m, true, nil
+}
+
 func (s *Store) ListProfiles() ([]Profile, error) {
 	rows, err := s.db.Query("SELECT id,label,sort_order FROM profiles ORDER BY sort_order,id")
 	if err != nil {

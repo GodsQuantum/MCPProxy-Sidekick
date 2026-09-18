@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>MCPProxy Sidekick</title>
+  <link rel="icon" href="./static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./static/app.css">
+</head>
+<body>
+  <div id="toast" class="toast" hidden></div>
+  <div id="login" class="login-shell" hidden>
+    <section class="login-card">
+      <div class="brand-mark" aria-hidden="true"><span></span><i></i></div>
+      <div>
+        <p class="eyebrow">MCPPROXY SIDEKICK</p>
+        <h1>Control your MCP stack.</h1>
+        <p class="muted">Use the same MCPProxy admin API key. Sidekick never stores it in browser storage.</p>
+      </div>
+      <form id="login-form">
+        <label for="admin-key">MCPProxy admin key</label>
+        <input id="admin-key" name="key" type="password" autocomplete="current-password" required>
+        <button class="primary" type="submit">Unlock Sidekick</button>
+      </form>
+    </section>
+  </div>
+
+  <div id="app" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><i></i></div>
+        <div><strong>MCPProxy</strong><small>Sidekick</small></div>
+      </div>
+      <nav id="nav" aria-label="Primary">
+        <button class="nav-item active" data-view="overview">Overview</button>
+        <button class="nav-item" data-view="profiles">Profiles</button>
+        <button class="nav-item" data-view="upstreams">Upstreams</button>
+        <button class="nav-item" data-view="credentials">Credentials</button>
+        <button class="nav-item" data-view="oauth">OAuth</button>
+        <button class="nav-item" data-view="tokens">Agent Tokens</button>
+        <button class="nav-item" data-view="security">Security</button>
+        <button class="nav-item" data-view="setup">Setup / Restore</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="refresh-state" class="live-dot">Live</span>
+        <button id="logout" class="ghost">Sign out</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="view-kicker">CONTROL PLANE</p>
+          <h1 id="view-title">Overview</h1>
+        </div>
+        <div class="top-actions">
+          <button id="refresh" class="secondary">Refresh</button>
+        </div>
+      </header>
+
+      <section id="view-overview" class="view active">
+        <div id="summary" class="stats-grid"></div>
+        <div class="section-head"><div><h2>Profiles</h2><p>See the MCP identities your agents can actually use.</p></div></div>
+        <div id="overview-profiles" class="profile-grid"></div>
+        <div class="section-head"><div><h2>Needs attention</h2><p>Authentication, disabled or unhealthy upstreams.</p></div></div>
+        <div id="attention" class="stack"></div>
+      </section>
+
+      <section id="view-profiles" class="view">
+        <div class="section-head">
+          <div><h2>Profiles</h2><p>Group upstreams by identity or role. Profiles are metadata; Agent Tokens enforce access.</p></div>
+          <button id="new-profile" class="primary">New profile</button>
+        </div>
+        <div id="profiles-list" class="profile-grid"></div>
+      </section>
+
+      <section id="view-upstreams" class="view">
+        <div class="section-head">
+          <div><h2>Upstreams</h2><p>Live inventory from MCPProxy. New servers appear automatically.</p></div>
+          <input id="upstream-search" class="search" type="search" placeholder="Filter upstreams…">
+        </div>
+        <div id="upstreams-list" class="server-grid"></div>
+      </section>
+
+      <section id="view-credentials" class="view">
+        <div class="section-head"><div><h2>Credentials</h2><p>Replace API keys without exposing the stored secret back to the browser.</p></div></div>
+        <div id="credentials-list" class="server-grid"></div>
+      </section>
+
+      <section id="view-oauth" class="view">
+        <div class="section-head"><div><h2>OAuth</h2><p>One click opens a visible sign-in tab. Loopback-only providers use the protected Cloud browser.</p></div></div>
+        <div id="oauth-list" class="server-grid"></div>
+      </section>
+
+      <section id="view-tokens" class="view">
+        <div class="section-head">
+          <div><h2>Agent Tokens</h2><p>Give agents only the upstreams and permission tiers they need.</p></div>
+          <button id="new-token" class="primary">New token</button>
+        </div>
+        <div id="tokens-list" class="stack"></div>
+      </section>
+
+      <section id="view-security" class="view">
+        <div class="security-grid">
+          <article class="panel"><h3>Secret handling</h3><p>Full credentials are never returned by Sidekick after submission. The UI stores only masked previews and SHA-256 fingerprints.</p></article>
+          <article class="panel"><h3>Agent isolation</h3><p>MCPProxy Agent Tokens scope upstream visibility and read/write/destructive permission tiers. Profile pinning is server-enforced.</p></article>
+          <article class="panel"><h3>Browser security</h3><p>State-changing calls require CSRF + trusted Origin. Sessions use HttpOnly, Secure, SameSite cookies.</p></article>
+          <article class="panel"><h3>Container posture</h3><p>No Docker socket. Non-root. Read-only root filesystem. Dropped capabilities. OAuth browser is reachable only through the authenticated gateway.</p></article>
+        </div>
+      </section>
+
+      <section id="view-setup" class="view">
+        <article class="panel setup-copy">
+          <h2>Restore the control plane</h2>
+          <p>Sidekick is intentionally stateless about secrets. Restore the containers, reconnect credentials, and MCPProxy remains the source of truth.</p>
+          <pre><code>cp .env.example .env
+docker compose up -d
+open https://mcp.example.com/control/</code></pre>
+          <p class="muted">Public examples use documentation-only values. Never commit your production overrides or secrets.</p>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="modal">
+    <form method="dialog" class="modal-card">
+      <button class="modal-close" value="cancel" aria-label="Close">×</button>
+      <div id="modal-body"></div>
+    </form>
+  </dialog>
+
+  <script src="./static/app.js" defer></script>
+</body>
+</html>

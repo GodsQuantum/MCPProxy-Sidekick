@@ -20,7 +20,7 @@ func (a Adapter) Apply(ctx context.Context, value string) error {
 	if value == "" {
 		return errors.New("empty Immich API key")
 	}
-	f, err := os.OpenFile(a.KeyFile, os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(a.KeyFile, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0o600)
 	if err != nil {
 		return err
 	}
