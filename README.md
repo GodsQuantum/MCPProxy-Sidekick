@@ -53,9 +53,11 @@ docker compose up -d
 
 Then route:
 
-- <code>/control/</code> → Sidekick on port 8081 inside the MCPProxy network namespace;
+- a mount path of your choice (for example <code>/control/</code> or <code>/command/</code>) → Sidekick on port 8081 inside the MCPProxy network namespace;
 - <code>/oauth-browser/</code> → Chromium/Selkies on port 3000, protected by Sidekick <code>/auth/check</code>;
 - everything else → MCPProxy.
+
+The frontend derives its API base from the current mount path, so the Sidekick path is not hard-coded. Set <code>SIDEKICK_PUBLIC_BASE_URL</code> to the same public URL and configure your reverse proxy to strip that prefix before forwarding to Sidekick.
 
 A reference Caddy configuration is included in [Caddyfile.example](Caddyfile.example).
 
