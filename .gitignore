@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+data/
+secrets/
+*.db
+*.sqlite*
+config.local.*
+compose.override.yaml
+screenshots/live/
+.worktrees/
