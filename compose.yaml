@@ -13,6 +13,7 @@ services:
       SIDEKICK_MCPPROXY_URL: "http://127.0.0.1:8080"
       SIDEKICK_MCPPROXY_ADMIN_KEY_FILE: "/run/secrets/mcpproxy_admin_key"
       SIDEKICK_PUBLIC_BASE_URL: "${SIDEKICK_PUBLIC_BASE_URL:-https://mcp.example.com/control/}"
+      SIDEKICK_MOUNT_PATH: "${SIDEKICK_MOUNT_PATH:-/control}"
       SIDEKICK_ALLOWED_HOSTS: "${SIDEKICK_ALLOWED_HOSTS:-mcp.example.com}"
       SIDEKICK_DB_PATH: "/data/sidekick.db"
       SIDEKICK_OAUTH_CDP_URL: "http://127.0.0.1:9222"

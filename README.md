@@ -187,6 +187,7 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_MCPPROXY_CONFIG_FILE | empty | Optional read-only MCPProxy JSON config; Sidekick can read its `api_key` directly instead of using a separate key file. |
 | SIDEKICK_DROP_UID / SIDEKICK_DROP_GID | empty | Optional Linux privilege drop target. Useful with a root-only MCPProxy config: start the container as root, load the config, then immediately drop to this UID/GID before opening SQLite or HTTP. |
 | SIDEKICK_PUBLIC_BASE_URL | https://mcp.example.com/control/ | Public control-panel URL. |
+| SIDEKICK_MOUNT_PATH | /control | Reverse-proxy mount path. Change this to /command or another prefix if desired. |
 | SIDEKICK_ALLOWED_HOSTS | mcp.example.com | Trusted browser Host/Origin values. |
 | SIDEKICK_SESSION_LIFETIME | 720h | Admin session lifetime. |
 | SIDEKICK_POSTIZ_BASE_URL | empty | Optional Postiz MCP base URL for URL-key auth. |

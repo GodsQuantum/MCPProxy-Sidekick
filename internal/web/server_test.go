@@ -33,7 +33,7 @@ func TestStateNeverReturnsFullUpstreamSecret(t *testing.T) {
 				Headers: map[string]string{"Authorization": "Bearer super-secret-value"},
 			}})
 		case "/api/v1/tokens":
-			_ = json.NewEncoder(w).Encode([]mcpproxy.AgentToken{})
+			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []mcpproxy.AgentToken{}})
 		default:
 			http.NotFound(w, r)
 		}

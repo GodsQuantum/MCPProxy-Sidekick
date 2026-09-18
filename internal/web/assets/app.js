@@ -1,7 +1,8 @@
 "use strict";
 
 const state={data:null,csrf:"",view:"overview"};
-const BASE=location.pathname==="/"?"" : location.pathname.replace(/\/+$/,"");
+const configuredBase=document.querySelector('meta[name="sidekick-mount-path"]')?.content?.trim()||"";
+const BASE=(configuredBase||location.pathname).replace(/\/+$/,"");
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

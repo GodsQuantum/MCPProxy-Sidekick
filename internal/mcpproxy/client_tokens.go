@@ -2,16 +2,28 @@ package mcpproxy
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 )
 
 func (c *Client) ListAgentTokens(ctx context.Context) ([]AgentToken, error) {
-	var out []AgentToken
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/tokens", nil, &out); err != nil {
+	var raw json.RawMessage
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/tokens", nil, &raw); err != nil {
 		return nil, err
 	}
-	return out, nil
+	var direct []AgentToken
+	if err := json.Unmarshal(raw, &direct); err == nil {
+		return direct, nil
+	}
+	var wrapped struct {
+		Tokens []AgentToken `json:"tokens"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil && wrapped.Tokens != nil {
+		return wrapped.Tokens, nil
+	}
+	return nil, errors.New("agent token response did not contain a token array")
 }
 
 func (c *Client) CreateAgentToken(ctx context.Context, req CreateAgentTokenRequest) (CreatedAgentToken, error) {

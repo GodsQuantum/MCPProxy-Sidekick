@@ -38,6 +38,20 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("DBPath = %q", cfg.DBPath)
 	}
 }
+func TestLoadMountPath(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_PUBLIC_BASE_URL", "https://mcp.example.com/control/")
+	t.Setenv("SIDEKICK_MOUNT_PATH", "/command/")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MountPath != "/command" {
+		t.Fatalf("MountPath = %q", cfg.MountPath)
+	}
+}
+
 func TestLoadReadsAdapterSettings(t *testing.T) {
 	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
 	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")

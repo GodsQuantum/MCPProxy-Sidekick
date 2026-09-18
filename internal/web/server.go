@@ -3,6 +3,7 @@ package web
 import (
 	"embed"
 	"encoding/json"
+	"html"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -73,8 +74,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "UI unavailable", 500)
 		return
 	}
+	page := strings.ReplaceAll(string(b), "__SIDEKICK_MOUNT_PATH__", html.EscapeString(s.Cfg.MountPath))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(b)
+	_, _ = w.Write([]byte(page))
 }
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"status": "ok"})

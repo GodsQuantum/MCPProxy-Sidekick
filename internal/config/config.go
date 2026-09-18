@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ type Config struct {
 	MCPProxyConfigFile   string
 	MCPProxyAdminKey     string
 	PublicBaseURL        string
+	MountPath            string
 	DBPath               string
 	AllowedHosts         []string
 	SessionLifetime      time.Duration
@@ -50,6 +52,13 @@ func Load() (Config, error) {
 		OmniRouteDB:          strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
 		DemoMode:             parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
 	}
+	mountPath := strings.TrimSpace(os.Getenv("SIDEKICK_MOUNT_PATH"))
+	if mountPath == "" && cfg.PublicBaseURL != "" {
+		if parsed, parseErr := url.Parse(cfg.PublicBaseURL); parseErr == nil {
+			mountPath = parsed.Path
+		}
+	}
+	cfg.MountPath = normalizeMountPath(mountPath)
 	if cfg.DemoMode {
 		if cfg.MCPProxyBaseURL == "" {
 			cfg.MCPProxyBaseURL = "http://demo.invalid"
@@ -98,3 +107,14 @@ func splitCSV(v string) []string {
 	return out
 }
 func parseBool(v string) bool { b, _ := strconv.ParseBool(strings.TrimSpace(v)); return b }
+
+func normalizeMountPath(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" || v == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(v, "/") {
+		v = "/" + v
+	}
+	return strings.TrimRight(v, "/")
+}
