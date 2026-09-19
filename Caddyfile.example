@@ -1,16 +1,20 @@
 mcp.example.com {
     redir /control /control/ 308
+    redir /control/oauth-browser /control/oauth-browser/ 308
 
-    handle_path /control/* {
-        reverse_proxy 127.0.0.1:8081
-    }
-
-    handle /oauth-browser/* {
+    handle /control/oauth-browser/* {
         forward_auth 127.0.0.1:8081 {
             uri /auth/check
         }
         reverse_proxy 127.0.0.1:3000
     }
+
+    handle_path /control/* {
+        reverse_proxy 127.0.0.1:8081
+    }
+
+    redir /oauth-browser /control/oauth-browser/ 308
+    redir /oauth-browser/ /control/oauth-browser/ 308
 
     handle {
         reverse_proxy 127.0.0.1:8080

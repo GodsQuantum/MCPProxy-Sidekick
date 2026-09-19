@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+
+install -d -o abc -g abc /config/.config/labwc /config/chromium-sidekick-oauth
+cat >/config/.config/labwc/autostart <<'EOF'
+#!/bin/bash
+(
+  while true; do
+    /usr/bin/chromium \
+      --no-sandbox \
+      --password-store=basic \
+      --start-maximized \
+      --test-type \
+      --ozone-platform=wayland \
+      ${CHROME_CLI}
+    sleep 2
+  done
+) &
+EOF
+chown abc:abc /config/.config/labwc/autostart
+chmod 0755 /config/.config/labwc/autostart

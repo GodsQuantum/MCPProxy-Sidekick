@@ -55,6 +55,7 @@ main{min-width:0;padding:32px clamp(20px,4vw,54px) 64px}
 .profile-card .chips{margin-top:14px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip,.badge{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);font-size:11px;padding:5px 8px;color:var(--muted)}
+.chip-x{border:0;background:transparent;color:var(--muted);font-size:15px;line-height:1;padding:0 0 0 4px}.chip-x:hover{color:var(--bad)}
 .badge.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 35%,var(--line))}
 .badge.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,var(--line))}
 .badge.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}

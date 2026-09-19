@@ -37,15 +37,19 @@ func decodeAgentTokens(raw json.RawMessage) ([]AgentToken, error) {
 }
 
 func (c *Client) CreateAgentToken(ctx context.Context, req CreateAgentTokenRequest) (CreatedAgentToken, error) {
-	var out CreatedAgentToken
-	err := c.doJSON(ctx, http.MethodPost, "/api/v1/tokens", req, &out)
-	return out, err
+	var raw json.RawMessage
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/tokens", req, &raw); err != nil {
+		return CreatedAgentToken{}, err
+	}
+	return decodeCreatedAgentToken(raw)
 }
 
 func (c *Client) RegenerateAgentToken(ctx context.Context, name string) (RegeneratedAgentToken, error) {
-	var out RegeneratedAgentToken
-	err := c.doJSON(ctx, http.MethodPost, "/api/v1/tokens/"+url.PathEscape(name)+"/regenerate", map[string]any{}, &out)
-	return out, err
+	var raw json.RawMessage
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/tokens/"+url.PathEscape(name)+"/regenerate", map[string]any{}, &raw); err != nil {
+		return RegeneratedAgentToken{}, err
+	}
+	return decodeRegeneratedAgentToken(raw)
 }
 
 func (c *Client) RevokeAgentToken(ctx context.Context, name string) error {
@@ -54,4 +58,34 @@ func (c *Client) RevokeAgentToken(ctx context.Context, name string) error {
 
 func (c *Client) DeleteAgentToken(ctx context.Context, name string) error {
 	return c.doJSON(ctx, http.MethodDelete, "/api/v1/tokens/"+url.PathEscape(name)+"/permanent", nil, nil)
+}
+
+func decodeCreatedAgentToken(raw json.RawMessage) (CreatedAgentToken, error) {
+	var direct CreatedAgentToken
+	if err := json.Unmarshal(raw, &direct); err == nil && direct.Token != "" {
+		return direct, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return CreatedAgentToken{}, fmt.Errorf("decode created Agent Token: %w", err)
+	}
+	if child, ok := obj["data"]; ok {
+		return decodeCreatedAgentToken(child)
+	}
+	return CreatedAgentToken{}, errors.New("created Agent Token response did not contain a one-time token")
+}
+
+func decodeRegeneratedAgentToken(raw json.RawMessage) (RegeneratedAgentToken, error) {
+	var direct RegeneratedAgentToken
+	if err := json.Unmarshal(raw, &direct); err == nil && direct.Token != "" {
+		return direct, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return RegeneratedAgentToken{}, fmt.Errorf("decode regenerated Agent Token: %w", err)
+	}
+	if child, ok := obj["data"]; ok {
+		return decodeRegeneratedAgentToken(child)
+	}
+	return RegeneratedAgentToken{}, errors.New("regenerated Agent Token response did not contain a one-time token")
 }

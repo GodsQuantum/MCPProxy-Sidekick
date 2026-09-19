@@ -36,7 +36,7 @@ It does not replace MCPProxy. MCPProxy remains the source of truth for routing, 
 
 ## 🚀 Quick start
 
-Sidekick expects an **already-running MCPProxy container**. By default that container is named <code>mcpproxy</code>.
+Sidekick expects an **already-running MCPProxy v0.67+ container**. By default that container is named <code>mcpproxy</code>.
 
 ~~~bash
 git clone https://github.com/GodsQuantum/mcpproxy-sidekick.git
@@ -54,7 +54,7 @@ docker compose up -d
 Then route:
 
 - a mount path of your choice (for example <code>/control/</code> or <code>/command/</code>) → Sidekick on port 8081 inside the MCPProxy network namespace;
-- <code>/oauth-browser/</code> → Chromium/Selkies on port 3000, protected by Sidekick <code>/auth/check</code>;
+- <code>/control/oauth-browser/</code> (or the equivalent path under your chosen Sidekick mount) → Chromium/Selkies on port 3000, protected by Sidekick <code>/auth/check</code>;
 - everything else → MCPProxy.
 
 The frontend derives its API base from the current mount path, so the Sidekick path is not hard-coded. Set <code>SIDEKICK_PUBLIC_BASE_URL</code> to the same public URL and configure your reverse proxy to strip that prefix before forwarding to Sidekick.
@@ -90,7 +90,7 @@ MCPProxy upstream OAuth sometimes requires a callback on the MCPProxy machine's 
 ~~~text
 your browser
     │
-    └── /oauth-browser/
+    └── /control/oauth-browser/
            │
            ▼
      protected Chromium
@@ -101,7 +101,7 @@ your browser
 
 Your client machine needs no SSH tunnel, callback daemon or local helper.
 
-Connectors with their own clean remote OAuth/device-code flow can still use that native flow instead.
+Connectors with their own clean remote OAuth/device-code flow can still use that native flow instead. For FastMCP/OIDC-proxy interoperability, see [FastMCP OAuth interoperability](docs/fastmcp-oauth.md), including the security constraints around `require_authorization_consent="external"`.
 
 ## 👥 Profiles
 
@@ -123,7 +123,9 @@ Family member
   Immich
 ~~~
 
-The public demo uses generic labels only. Your production profile names stay in Sidekick's local SQLite database.
+Profiles are **native MCPProxy v0.67+ profiles**. Sidekick reads them from `GET /api/v1/profiles` and applies membership changes through MCPProxy's configuration API; it does not keep a second profile catalog in SQLite. Native routes are `/mcp/p/<name>`.
+
+**Upgrade note from Sidekick ≤ v0.1.8:** legacy SQLite profile tables are no longer a runtime source of truth. They are left untouched rather than silently deleted. Recreate any legacy-only profile in MCPProxy before removing an old Sidekick database.
 
 ## 🪪 Agent Tokens
 
@@ -173,11 +175,11 @@ Sidekick intentionally stores no recoverable credential vault.
 1. restore/start MCPProxy;
 2. clone Sidekick;
 3. recreate <code>secrets/mcpproxy_admin_key</code>;
-4. restore Sidekick's optional data volume if you want profile labels and masked metadata;
+4. restore Sidekick's optional data volume if you want masked credential metadata; native Profiles are restored with MCPProxy;
 5. run <code>docker compose up -d</code>;
 6. reconnect credentials/OAuth that are not already persisted by MCPProxy/upstream volumes.
 
-Even without Sidekick's SQLite file, MCPProxy remains authoritative for its server inventory.
+Even without Sidekick's SQLite file, MCPProxy remains authoritative for its server inventory and Profiles.
 
 ## ⚙️ Configuration
 

@@ -12,7 +12,7 @@ import (
 	paperlessadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/paperless"
 	postizadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/postiz"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
-	"github.com/GodsQuantum/mcpproxy-sidekick/internal/profiles"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/storage"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
 )
 
@@ -28,10 +28,11 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		warnings = append(warnings, "MCPProxy server inventory is temporarily unavailable")
 		servers = nil
 	}
-	ps, err := s.Profiles.ListProfiles()
+	ps, err := s.Proxy.ListProfiles(r.Context())
 	if err != nil {
-		writeError(w, 500, err.Error())
-		return
+		log.Printf("sidekick state: MCPProxy profile inventory unavailable: %v", err)
+		warnings = append(warnings, "MCPProxy profile inventory is temporarily unavailable")
+		ps = nil
 	}
 	toks, err := s.Tokens.List(r.Context())
 	if err != nil {
@@ -43,7 +44,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	safe := make([]safeUpstream, 0, len(servers))
 	connected, tools, authNeeded, quarantined := 0, 0, 0, 0
 	for _, srv := range servers {
-		meta, ok, merr := s.Profiles.CredentialMeta(srv.Name)
+		meta, ok, merr := s.Store.CredentialMeta(srv.Name)
 		if merr != nil {
 			writeError(w, 500, merr.Error())
 			return
@@ -63,7 +64,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 			quarantined++
 		}
 		tools += srv.ToolCount
-		safe = append(safe, safeUpstream{Name: srv.Name, Enabled: srv.Enabled, Status: st, Protocol: srv.Protocol, ToolCount: srv.ToolCount, Authenticated: srv.Authenticated, Quarantined: srv.Quarantined, OAuth: len(srv.OAuth) > 0, CredentialConfigured: configured, CredentialPreview: preview, Profile: pm[srv.Name]})
+		safe = append(safe, safeUpstream{Name: srv.Name, Enabled: srv.Enabled, Status: st, Protocol: srv.Protocol, ToolCount: srv.ToolCount, Authenticated: srv.Authenticated, Quarantined: srv.Quarantined, OAuth: len(srv.OAuth) > 0, CredentialConfigured: configured, CredentialPreview: preview, Profiles: pm[srv.Name]})
 	}
 	writeJSON(w, 200, map[string]any{
 		"summary":   map[string]int{"total": len(safe), "connected": connected, "tools": tools, "auth_required": authNeeded, "quarantined": quarantined},
@@ -105,7 +106,7 @@ func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	_ = s.Profiles.UpsertCredentialMeta(profiles.CredentialMeta{ServerName: name, MaskedPreview: credentials.Mask(req.Value), Fingerprint: credentials.Fingerprint(req.Value), UpdatedAt: time.Now().UTC().Format(time.RFC3339)})
+	_ = s.Store.UpsertCredentialMeta(storage.CredentialMeta{ServerName: name, MaskedPreview: credentials.Mask(req.Value), Fingerprint: credentials.Fingerprint(req.Value), UpdatedAt: time.Now().UTC().Format(time.RFC3339)})
 	writeJSON(w, 200, map[string]any{"ok": true, "preview": credentials.Mask(req.Value)})
 }
 
@@ -133,36 +134,26 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 502, err.Error())
 		return
 	}
-	if c, err := r.Cookie("sidekick_session"); err == nil {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "sidekick_oauth_browser",
-			Value:    c.Value,
-			Path:     "/oauth-browser/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-			MaxAge:   15 * 60,
-		})
-	}
 	writeJSON(w, 200, result)
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
-	var p profiles.Profile
-	if decodeJSON(w, r, &p) != nil {
+	var req struct {
+		Name string `json:"name"`
+		ID   string `json:"id"`
+	}
+	if decodeJSON(w, r, &req) != nil {
 		return
 	}
-	p.ID = strings.TrimSpace(p.ID)
-	p.Label = strings.TrimSpace(p.Label)
-	if p.ID == "" || p.Label == "" {
-		writeError(w, 400, "profile id and label are required")
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = strings.TrimSpace(req.ID)
+	}
+	if err := s.Proxy.CreateProfile(r.Context(), name); err != nil {
+		writeError(w, 400, err.Error())
 		return
 	}
-	if err := s.Profiles.UpsertProfile(p); err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-	writeJSON(w, 200, p)
+	writeJSON(w, http.StatusCreated, map[string]string{"name": name})
 }
 
 func (s *Server) handleProfileServer(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +169,51 @@ func (s *Server) handleProfileServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "profile id and server are required")
 		return
 	}
-	if err := s.Profiles.AssignServer(id, req.Server); err != nil {
+	if err := s.Proxy.AssignProfileServer(r.Context(), id, req.Server); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleProfileServerDelete(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	server := strings.TrimSpace(r.PathValue("server"))
+	if id == "" || server == "" {
+		writeError(w, 400, "profile and upstream are required")
+		return
+	}
+	if err := s.Proxy.RemoveProfileServer(r.Context(), id, server); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("id"))
+	if name == "" {
+		writeError(w, 400, "profile is required")
+		return
+	}
+	toks, err := s.Proxy.ListAgentTokens(r.Context())
+	if err != nil {
+		writeError(w, 502, "cannot verify Agent Token profile pins: "+err.Error())
+		return
+	}
+	var pinnedBy []string
+	now := time.Now()
+	for _, tok := range toks {
+		active := !tok.Revoked && (tok.ExpiresAt.IsZero() || tok.ExpiresAt.After(now))
+		if active && tok.ProfilePin == name {
+			pinnedBy = append(pinnedBy, tok.Name)
+		}
+	}
+	if len(pinnedBy) > 0 {
+		writeError(w, 409, "profile is pinned by Agent Tokens: "+strings.Join(pinnedBy, ", "))
+		return
+	}
+	if err := s.Proxy.DeleteProfile(r.Context(), name); err != nil {
 		writeError(w, 400, err.Error())
 		return
 	}
@@ -232,15 +267,15 @@ func (s *Server) handleDemoState(w http.ResponseWriter) {
 	writeJSON(w, 200, map[string]any{
 		"summary": map[string]int{"total": 8, "connected": 7, "tools": 284, "auth_required": 1, "quarantined": 0},
 		"profiles": []map[string]any{
-			{"id": "personal", "label": "Personal", "servers": []string{"google-workspace", "paperless", "immich", "microsoft"}},
-			{"id": "creator", "label": "Creator", "servers": []string{"google-workspace-work", "postiz"}},
-			{"id": "family", "label": "Family member", "servers": []string{"paperless-family", "immich-family"}},
+			{"name": "personal", "servers": []string{"google-workspace", "paperless", "immich", "microsoft"}, "tool_count": 269},
+			{"name": "creator", "servers": []string{"google-workspace-work", "postiz"}, "tool_count": 96},
+			{"name": "family", "servers": []string{"paperless-family", "immich-family"}, "tool_count": 120},
 		},
 		"upstreams": []safeUpstream{
-			{Name: "google-workspace", Enabled: true, Status: "ready", ToolCount: 87, Authenticated: true, OAuth: true, CredentialConfigured: true, CredentialPreview: "OAuth connected", Profile: "personal"},
-			{Name: "microsoft", Enabled: true, Status: "ready", ToolCount: 62, Authenticated: true, OAuth: true, CredentialConfigured: true, CredentialPreview: "OAuth connected", Profile: "personal"},
-			{Name: "paperless", Enabled: true, Status: "ready", ToolCount: 119, CredentialConfigured: true, CredentialPreview: "tok_••••93fa", Profile: "personal"},
-			{Name: "immich", Enabled: true, Status: "ready", ToolCount: 1, CredentialConfigured: true, CredentialPreview: "imm_••••4d1c", Profile: "personal"},
+			{Name: "google-workspace", Enabled: true, Status: "ready", ToolCount: 87, Authenticated: true, OAuth: true, CredentialConfigured: true, CredentialPreview: "OAuth connected", Profiles: []string{"personal"}},
+			{Name: "microsoft", Enabled: true, Status: "ready", ToolCount: 62, Authenticated: true, OAuth: true, CredentialConfigured: true, CredentialPreview: "OAuth connected", Profiles: []string{"personal"}},
+			{Name: "paperless", Enabled: true, Status: "ready", ToolCount: 119, CredentialConfigured: true, CredentialPreview: "tok_••••93fa", Profiles: []string{"personal"}},
+			{Name: "immich", Enabled: true, Status: "ready", ToolCount: 1, CredentialConfigured: true, CredentialPreview: "imm_••••4d1c", Profiles: []string{"personal"}},
 			{Name: "github", Enabled: true, Status: "ready", ToolCount: 94, CredentialConfigured: true, CredentialPreview: "ghp_••••7f2a"},
 			{Name: "canva", Enabled: true, Status: "ready", ToolCount: 21, Authenticated: true, OAuth: true, CredentialConfigured: true, CredentialPreview: "OAuth connected"},
 			{Name: "notion", Enabled: true, Status: "ready", ToolCount: 22, Authenticated: true, OAuth: true, CredentialConfigured: true, CredentialPreview: "OAuth connected"},

@@ -6,6 +6,7 @@ import (
 	"html"
 	"io/fs"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/oauth"
-	"github.com/GodsQuantum/mcpproxy-sidekick/internal/profiles"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/security"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/storage"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
 )
 
@@ -26,24 +27,24 @@ type Server struct {
 	Cfg         config.Config
 	Auth        *auth.Manager
 	Proxy       *mcpproxy.Client
-	Profiles    *profiles.Store
+	Store       *storage.Store
 	Credentials credentials.Service
 	Tokens      tokens.Service
 	OAuth       oauth.Service
 }
 
 type safeUpstream struct {
-	Name                 string `json:"name"`
-	Enabled              bool   `json:"enabled"`
-	Status               string `json:"status"`
-	Protocol             string `json:"protocol,omitempty"`
-	ToolCount            int    `json:"tool_count"`
-	Authenticated        bool   `json:"authenticated"`
-	Quarantined          bool   `json:"quarantined"`
-	OAuth                bool   `json:"oauth"`
-	CredentialConfigured bool   `json:"credential_configured"`
-	CredentialPreview    string `json:"credential_preview,omitempty"`
-	Profile              string `json:"profile,omitempty"`
+	Name                 string   `json:"name"`
+	Enabled              bool     `json:"enabled"`
+	Status               string   `json:"status"`
+	Protocol             string   `json:"protocol,omitempty"`
+	ToolCount            int      `json:"tool_count"`
+	Authenticated        bool     `json:"authenticated"`
+	Quarantined          bool     `json:"quarantined"`
+	OAuth                bool     `json:"oauth"`
+	CredentialConfigured bool     `json:"credential_configured"`
+	CredentialPreview    string   `json:"credential_preview,omitempty"`
+	Profiles             []string `json:"profiles,omitempty"`
 }
 
 func (s *Server) Handler() http.Handler {
@@ -60,7 +61,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/upstreams/{name}/oauth/start", s.requireSession(s.requireMutation(s.handleOAuthStart)))
 	mux.HandleFunc("POST /api/adapters/omniroute/restore-master", s.requireSession(s.requireMutation(s.handleOmniRouteRestoreMaster)))
 	mux.HandleFunc("POST /api/profiles", s.requireSession(s.requireMutation(s.handleProfile)))
+	mux.HandleFunc("DELETE /api/profiles/{id}", s.requireSession(s.requireMutation(s.handleProfileDelete)))
 	mux.HandleFunc("POST /api/profiles/{id}/servers", s.requireSession(s.requireMutation(s.handleProfileServer)))
+	mux.HandleFunc("DELETE /api/profiles/{id}/servers/{server}", s.requireSession(s.requireMutation(s.handleProfileServerDelete)))
 	mux.HandleFunc("POST /api/tokens", s.requireSession(s.requireMutation(s.handleTokenCreate)))
 	mux.HandleFunc("POST /api/tokens/{name}/regenerate", s.requireSession(s.requireMutation(s.handleTokenRegenerate)))
 	mux.HandleFunc("DELETE /api/tokens/{name}", s.requireSession(s.requireMutation(s.handleTokenRevoke)))
@@ -107,7 +110,6 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.Auth.Delete(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: "sidekick_session", Value: "", Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
-	http.SetCookie(w, &http.Cookie{Name: "sidekick_oauth_browser", Value: "", Path: "/oauth-browser/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -116,17 +118,16 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	for _, name := range []string{"sidekick_session", "sidekick_oauth_browser"} {
-		c, err := r.Cookie(name)
-		if err != nil {
-			continue
-		}
-		if _, ok := s.Auth.Validate(c.Value); ok {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	c, err := r.Cookie("sidekick_session")
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
 	}
-	writeError(w, http.StatusUnauthorized, "authentication required")
+	if _, ok := s.Auth.Validate(c.Value); !ok {
+		writeError(w, http.StatusUnauthorized, "session expired")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
@@ -192,7 +193,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-func credentialView(server mcpproxy.Server, meta profiles.CredentialMeta, hasMeta bool) (bool, string) {
+func credentialView(server mcpproxy.Server, meta storage.CredentialMeta, hasMeta bool) (bool, string) {
 	if hasMeta {
 		return true, meta.MaskedPreview
 	}
@@ -212,12 +213,15 @@ func credentialView(server mcpproxy.Server, meta profiles.CredentialMeta, hasMet
 	return false, ""
 }
 
-func profileMap(ps []profiles.Profile) map[string]string {
-	m := map[string]string{}
+func profileMap(ps []mcpproxy.Profile) map[string][]string {
+	m := map[string][]string{}
 	for _, p := range ps {
 		for _, name := range p.Servers {
-			m[name] = p.ID
+			m[name] = append(m[name], p.Name)
 		}
+	}
+	for name := range m {
+		sort.Strings(m[name])
 	}
 	return m
 }

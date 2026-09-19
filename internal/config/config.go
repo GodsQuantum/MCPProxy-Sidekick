@@ -45,7 +45,7 @@ func Load() (Config, error) {
 		AllowedHosts:         splitCSV(os.Getenv("SIDEKICK_ALLOWED_HOSTS")),
 		SessionLifetime:      lifetime,
 		OAuthCDPURL:          envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
-		OAuthBrowserURL:      envOr("SIDEKICK_OAUTH_BROWSER_URL", "/oauth-browser/"),
+		OAuthBrowserURL:      strings.TrimSpace(os.Getenv("SIDEKICK_OAUTH_BROWSER_URL")),
 		PostizBaseURL:        strings.TrimSpace(os.Getenv("SIDEKICK_POSTIZ_BASE_URL")),
 		PaperlessEndpoint:    strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
 		ImmichKeyDir:         strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
@@ -59,6 +59,12 @@ func Load() (Config, error) {
 		}
 	}
 	cfg.MountPath = normalizeMountPath(mountPath)
+	if cfg.OAuthBrowserURL == "" {
+		cfg.OAuthBrowserURL = "/oauth-browser/"
+		if cfg.MountPath != "" {
+			cfg.OAuthBrowserURL = cfg.MountPath + "/oauth-browser/"
+		}
+	}
 	if cfg.DemoMode {
 		if cfg.MCPProxyBaseURL == "" {
 			cfg.MCPProxyBaseURL = "http://demo.invalid"

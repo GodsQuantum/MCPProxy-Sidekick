@@ -11,13 +11,15 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 type Client struct {
-	baseURL string
-	apiKey  string
-	http    *http.Client
+	baseURL   string
+	apiKey    string
+	http      *http.Client
+	profileMu sync.Mutex
 }
 
 func NewClient(baseURL, adminKeyFile string) (*Client, error) {

@@ -8,6 +8,9 @@ services:
     container_name: mcpproxy-sidekick
     restart: unless-stopped
     network_mode: "container:${MCPPROXY_CONTAINER_NAME:-mcpproxy}"
+    depends_on:
+      oauth-browser:
+        condition: service_healthy
     environment:
       SIDEKICK_LISTEN_ADDR: ":8081"
       SIDEKICK_MCPPROXY_URL: "http://127.0.0.1:8080"
@@ -17,7 +20,7 @@ services:
       SIDEKICK_ALLOWED_HOSTS: "${SIDEKICK_ALLOWED_HOSTS:-mcp.example.com}"
       SIDEKICK_DB_PATH: "/data/sidekick.db"
       SIDEKICK_OAUTH_CDP_URL: "http://127.0.0.1:9222"
-      SIDEKICK_OAUTH_BROWSER_URL: "/oauth-browser/"
+      SIDEKICK_OAUTH_BROWSER_URL: "${SIDEKICK_OAUTH_BROWSER_URL:-/control/oauth-browser/}"
       SIDEKICK_SESSION_LIFETIME: "${SIDEKICK_SESSION_LIFETIME:-720h}"
       SIDEKICK_POSTIZ_BASE_URL: "${SIDEKICK_POSTIZ_BASE_URL:-}"
       SIDEKICK_PAPERLESS_ENDPOINT: "${SIDEKICK_PAPERLESS_ENDPOINT:-}"
@@ -44,12 +47,19 @@ services:
       PUID: "${PUID:-1000}"
       PGID: "${PGID:-1000}"
       TZ: "${TZ:-UTC}"
-      SUBFOLDER: "/oauth-browser/"
+      SUBFOLDER: "/control/oauth-browser/"
       TITLE: "MCPProxy Sidekick OAuth"
-      CHROME_CLI: "--remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 about:blank"
+      CHROME_CLI: "--user-data-dir=/config/chromium-sidekick-oauth --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --no-first-run --no-default-browser-check about:blank"
     volumes:
       - oauth-browser-data:/config
+      - ./deploy/oauth-browser:/custom-cont-init.d:ro
     shm_size: 1gb
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9222/json/version"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
     security_opt:
       - no-new-privileges:true
 

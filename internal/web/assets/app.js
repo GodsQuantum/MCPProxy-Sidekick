@@ -34,8 +34,8 @@ function badge(status,enabled=true,quarantined=false){
 }
 
 function profileLabel(id){
-  const p=(state.data?.profiles||[]).find(x=>x.id===id);
-  return p?p.label:(id||"Unassigned");
+  const p=(state.data?.profiles||[]).find(x=>x.name===id);
+  return p?p.name:(id||"Unassigned");
 }
 
 async function load(){
@@ -67,10 +67,13 @@ function renderProfiles(){
   const ps=state.data?.profiles||[];
   const html=ps.length?ps.map(p=>{
     const servers=p.servers||[];
-    return '<article class="profile-card"><div class="row"><div><h3>'+esc(p.label)+'</h3><span class="muted">'+esc(p.id)+'</span></div><span class="badge">'+servers.length+' upstreams</span></div><div class="chips">'+(servers.map(n=>'<span class="chip">'+esc(n)+'</span>').join("")||'<span class="muted">No upstreams yet</span>')+'</div><div class="card-actions"><button class="secondary assign-server" data-profile="'+esc(p.id)+'">Add upstream</button></div></article>';
-  }).join(""):'<div class="empty">No profiles yet. Create one to group identities or roles.</div>';
+    const chips=servers.map(n=>'<span class="chip">'+esc(n)+' <button class="chip-x remove-profile-server" type="button" data-profile="'+esc(p.name)+'" data-server="'+esc(n)+'" aria-label="Remove '+esc(n)+'">×</button></span>').join("");
+    return '<article class="profile-card"><div class="row"><div><h3>'+esc(p.name)+'</h3><span class="muted">/mcp/p/'+esc(p.name)+'</span></div><span class="badge">'+esc(p.tool_count||0)+' tools</span></div><div class="chips">'+(chips||'<span class="muted">Deny-all until an upstream is assigned</span>')+'</div><div class="card-actions"><button class="secondary assign-server" data-profile="'+esc(p.name)+'">Add upstream</button><button class="ghost delete-profile" data-profile="'+esc(p.name)+'">Delete</button></div></article>';
+  }).join(""):'<div class="empty">No MCPProxy profiles yet.</div>';
   $("#profiles-list").innerHTML=html; $("#overview-profiles").innerHTML=html;
   $$(".assign-server").forEach(b=>b.onclick=()=>openAssign(b.dataset.profile));
+  $$(".remove-profile-server").forEach(b=>b.onclick=()=>removeProfileServer(b.dataset.profile,b.dataset.server));
+  $$(".delete-profile").forEach(b=>b.onclick=()=>deleteProfile(b.dataset.profile));
 }
 
 function serverCard(s,withActions=true){
@@ -79,7 +82,8 @@ function serverCard(s,withActions=true){
     action=s.oauth?'<button class="secondary oauth-start" data-name="'+esc(s.name)+'">'+(s.authenticated?"Reconnect OAuth":"Connect OAuth")+'</button>':'<button class="secondary credential-open" data-name="'+esc(s.name)+'">Set credential</button>';
     if(s.name==="omniroute" && state.data?.capabilities?.omniroute_restore_master){ action+='<button class="secondary omni-restore">Restore existing Master</button>'; }
   }
-  return '<article class="server-card" data-name="'+esc(s.name)+'"><div class="server-top"><div><h3>'+esc(s.name)+'</h3><span class="muted">'+esc(profileLabel(s.profile))+'</span></div>'+badge(s.status,s.enabled,s.quarantined)+'</div><div class="server-meta"><span>'+esc(s.protocol||"MCP")+'</span><strong>'+esc(s.tool_count||0)+' tools</strong></div><div class="preview">'+(s.credential_configured?esc(s.credential_preview||"Configured"):"No credential detected")+'</div>'+(withActions?'<div class="card-actions">'+action+'</div>':"")+'</article>';
+  const memberships=(s.profiles||[]).join(", ")||"Unassigned";
+  return '<article class="server-card" data-name="'+esc(s.name)+'"><div class="server-top"><div><h3>'+esc(s.name)+'</h3><span class="muted">'+esc(memberships)+'</span></div>'+badge(s.status,s.enabled,s.quarantined)+'</div><div class="server-meta"><span>'+esc(s.protocol||"MCP")+'</span><strong>'+esc(s.tool_count||0)+' tools</strong></div><div class="preview">'+(s.credential_configured?esc(s.credential_preview||"Configured"):"No credential detected")+'</div>'+(withActions?'<div class="card-actions">'+action+'</div>':"")+'</article>';
 }
 
 function renderUpstreams(){
@@ -128,7 +132,7 @@ async function startOAuth(name){
     const result=await api("/api/upstreams/"+encodeURIComponent(name)+"/oauth/start",{method:"POST",body:"{}"});
     popup.location=result.browser_url; popup.focus(); toast("Fresh OAuth session started for "+name+". Complete sign-in in the new tab."); setTimeout(load,2500);
   }catch(e){
-    try{popup.close()}catch{}
+    try{popup.document.body.textContent="OAuth start failed: "+e.message}catch{}
     toast("OAuth start failed: "+e.message);
   }
 }
@@ -167,13 +171,19 @@ function showOneTimeToken(name,token){
 
 function openToken(){
   const upstreams=state.data?.upstreams||[],profiles=state.data?.profiles||[];
-  const profileOpts=profiles.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join("");
-  const servers=upstreams.map(s=>'<label class="chip"><input type="checkbox" name="server" value="'+esc(s.name)+'"> '+esc(s.name)+'</label>').join("");
-  openModal('<h2>New Agent Token</h2><form id="token-form" class="form-grid"><label>Name<input id="token-name" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" required placeholder="family-agent"></label><label>Profile pin<select id="token-profile"><option value="">No profile pin</option>'+profileOpts+'</select></label><fieldset><legend>Allowed upstreams</legend><div class="chips">'+servers+'</div></fieldset><fieldset><legend>Permissions</legend><div class="chips"><label class="chip"><input type="checkbox" name="perm" value="read" checked> read</label><label class="chip"><input type="checkbox" name="perm" value="write"> write</label><label class="chip"><input type="checkbox" name="perm" value="destructive"> destructive</label></div></fieldset><label>Expiry<input id="token-expiry" value="30d" placeholder="30d"></label><button class="primary" type="submit">Create token</button></form>');
-  $("#token-profile").onchange=e=>{const p=profiles.find(x=>x.id===e.target.value);if(!p)return;$$('input[name="server"]').forEach(x=>{x.checked=(p.servers||[]).includes(x.value)})};
+  const profileOpts=profiles.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join("");
+  const servers='<label class="chip"><input type="checkbox" id="server-all" value="*"> All upstreams (*)</label>'+upstreams.map(s=>'<label class="chip"><input type="checkbox" name="server" value="'+esc(s.name)+'"> '+esc(s.name)+'</label>').join("");
+  openModal('<h2>New Agent Token</h2><form id="token-form" class="form-grid"><label>Name<input id="token-name" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" required placeholder="family-agent"></label><label>Profile pin<select id="token-profile"><option value="">No profile pin</option>'+profileOpts+'</select></label><fieldset><legend>Allowed upstreams</legend><div class="chips">'+servers+'</div><small class="muted">With a profile pin, Sidekick uses * and MCPProxy enforces the profile server-side.</small></fieldset><fieldset><legend>Permissions</legend><div class="chips"><label class="chip"><input type="checkbox" name="perm" value="read" checked> read</label><label class="chip"><input type="checkbox" name="perm" value="write"> write</label><label class="chip"><input type="checkbox" name="perm" value="destructive"> destructive</label></div></fieldset><label>Expiry<input id="token-expiry" value="30d" placeholder="30d"></label><button class="primary" type="submit">Create token</button></form>');
+  const syncTokenScope=()=>{
+    const pinned=!!$("#token-profile").value,all=$("#server-all");
+    all.checked=pinned||all.checked;
+    $$('input[name="server"]').forEach(x=>{x.disabled=pinned||all.checked;if(pinned||all.checked)x.checked=false});
+  };
+  $("#token-profile").onchange=()=>{if(!$("#token-profile").value)$("#server-all").checked=false;syncTokenScope()};
+  $("#server-all").onchange=syncTokenScope;
   $("#token-form").onsubmit=async e=>{
     e.preventDefault();
-    const serversChosen=$$('input[name="server"]:checked').map(x=>x.value);
+    const serversChosen=$("#server-all").checked?["*"]:$$('input[name="server"]:checked').map(x=>x.value);
     const perms=$$('input[name="perm"]:checked').map(x=>x.value);
     const destructive=perms.includes("destructive");
     const confirmation=!destructive||confirm("This token can call destructive tools. Grant destructive permission?");
@@ -186,15 +196,26 @@ function openToken(){
 }
 
 function openNewProfile(){
-  openModal('<h2>New profile</h2><form id="profile-form" class="form-grid"><label>ID<input id="profile-id" required placeholder="family-member"></label><label>Label<input id="profile-label" required placeholder="Family member"></label><button class="primary" type="submit">Create profile</button></form>');
-  $("#profile-form").onsubmit=async e=>{e.preventDefault();try{await api("/api/profiles",{method:"POST",body:JSON.stringify({id:$("#profile-id").value,label:$("#profile-label").value,sort_order:0})});$("#modal").close();await load()}catch(err){toast(err.message)}};
+  openModal('<h2>New MCPProxy profile</h2><p class="muted">Native profile URL: /mcp/p/&lt;name&gt;. Use lowercase letters, digits, - or _.</p><form id="profile-form" class="form-grid"><label>Name<input id="profile-name" pattern="[a-z0-9][a-z0-9_-]{0,62}" required placeholder="coding"></label><button class="primary" type="submit">Create profile</button></form>');
+  $("#profile-form").onsubmit=async e=>{e.preventDefault();try{await api("/api/profiles",{method:"POST",body:JSON.stringify({name:$("#profile-name").value.trim()})});$("#modal").close();toast("Profile created in MCPProxy");await load()}catch(err){toast(err.message)}};
 }
 function openAssign(profile){
-  const opts=(state.data?.upstreams||[]).map(s=>'<option value="'+esc(s.name)+'">'+esc(s.name)+'</option>').join("");
-  openModal('<h2>Add upstream · '+esc(profileLabel(profile))+'</h2><form id="assign-form" class="form-grid"><label>Upstream<select id="assign-server">'+opts+'</select></label><button class="primary" type="submit">Assign</button></form>');
-  $("#assign-form").onsubmit=async e=>{e.preventDefault();try{await api("/api/profiles/"+encodeURIComponent(profile)+"/servers",{method:"POST",body:JSON.stringify({server:$("#assign-server").value})});$("#modal").close();await load()}catch(err){toast(err.message)}};
+  const p=(state.data?.profiles||[]).find(x=>x.name===profile);
+  const assigned=new Set(p?.servers||[]);
+  const opts=(state.data?.upstreams||[]).filter(s=>!assigned.has(s.name)).map(s=>'<option value="'+esc(s.name)+'">'+esc(s.name)+'</option>').join("");
+  if(!opts){toast("All upstreams are already assigned to "+profile);return}
+  openModal('<h2>Add upstream · '+esc(profile)+'</h2><form id="assign-form" class="form-grid"><label>Upstream<select id="assign-server">'+opts+'</select></label><button class="primary" type="submit">Assign</button></form>');
+  $("#assign-form").onsubmit=async e=>{e.preventDefault();try{await api("/api/profiles/"+encodeURIComponent(profile)+"/servers",{method:"POST",body:JSON.stringify({server:$("#assign-server").value})});$("#modal").close();toast("Profile updated");await load()}catch(err){toast(err.message)}};
 }
 
+async function removeProfileServer(profile,server){
+  if(!confirm("Remove "+server+" from "+profile+"?"))return;
+  try{await api("/api/profiles/"+encodeURIComponent(profile)+"/servers/"+encodeURIComponent(server),{method:"DELETE",body:"{}"});toast("Profile updated");await load()}catch(e){toast(e.message)}
+}
+async function deleteProfile(profile){
+  if(!confirm("Delete MCPProxy profile "+profile+"? Pinned Agent Tokens are protected and will block this action."))return;
+  try{await api("/api/profiles/"+encodeURIComponent(profile),{method:"DELETE",body:"{}"});toast("Profile deleted");await load()}catch(e){toast(e.message)}
+}
 function openModal(html){$("#modal-body").innerHTML=html;$("#modal").showModal()}
 function switchView(name){
   state.view=name;
@@ -213,6 +234,7 @@ $("#refresh").onclick=load;
 $("#upstream-search").oninput=renderUpstreams;
 $("#new-profile").onclick=openNewProfile;
 $("#new-token").onclick=openToken;
+$(".modal-close").onclick=()=>$("#modal").close();
 $("#modal").addEventListener("click",e=>{if(e.target===$("#modal"))$("#modal").close()});
 $$(".nav-item").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 

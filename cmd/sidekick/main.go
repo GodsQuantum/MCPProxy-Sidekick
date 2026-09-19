@@ -11,8 +11,8 @@ import (
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/oauth"
-	"github.com/GodsQuantum/mcpproxy-sidekick/internal/profiles"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/runtimepriv"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/storage"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/web"
 )
@@ -62,14 +62,14 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		store, err := profiles.Open(cfg.DBPath)
+		store, err := storage.Open(cfg.DBPath)
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer store.Close()
 		app.Auth = authManager
 		app.Proxy = proxy
-		app.Profiles = store
+		app.Store = store
 		app.Credentials = credentials.Service{Editor: proxy}
 		app.Tokens = tokens.Service{Backend: proxy}
 		app.OAuth = oauth.Service{Starter: proxy, Browser: oauth.Browser{CDPBaseURL: cfg.OAuthCDPURL, PublicSessionURL: cfg.OAuthBrowserURL}}

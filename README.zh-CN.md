@@ -29,7 +29,7 @@ Sidekick 不替代 MCPProxy。MCPProxy 仍然负责路由、工具发现、上�
 
 ## 🚀 快速开始
 
-Sidekick 需要一个已经运行的 MCPProxy 容器，默认名称为 `mcpproxy`。
+Sidekick 需要一个已经运行的 **MCPProxy v0.67+** 容器，默认名称为 `mcpproxy`。
 
 ```bash
 git clone https://github.com/GodsQuantum/mcpproxy-sidekick.git
@@ -44,7 +44,7 @@ docker compose up -d
 推荐反向代理：
 
 - `/control/` → Sidekick；
-- `/oauth-browser/` → 由 Sidekick 会话保护的 Chromium/Selkies；
+- `/control/oauth-browser/`（或你选择的 Sidekick 挂载路径下的对应路径）→ 由 Sidekick 会话保护的 Chromium/Selkies；
 - 其他路径 → MCPProxy。
 
 仓库中提供 [`Caddyfile.example`](Caddyfile.example)。
@@ -63,7 +63,9 @@ docker compose up -d
 
 ## 👥 Profiles
 
-Profiles 用于按身份或角色组织上游。真正的 Agent 隔离由 MCPProxy Agent Tokens 强制执行。
+Profiles 现在直接使用 **MCPProxy v0.67+ 原生 Profiles**。Sidekick 通过 `GET /api/v1/profiles` 读取，并通过 MCPProxy 配置 API 修改成员关系；SQLite 不再维护第二份 Profile 目录。原生访问路径为 `/mcp/p/<name>`。
+
+**从 Sidekick ≤ v0.1.8 升级：** 旧 SQLite Profile 表不再参与运行时，但不会被静默删除。如果仍有只存在于旧数据库中的 Profile，请先在 MCPProxy 中重新创建，再删除旧数据库。
 
 ## 🪪 Agent Tokens
 
@@ -89,7 +91,7 @@ Sidekick 支持 MCPProxy 原生 Agent Tokens：`allowed_servers`、`read / write
 
 Sidekick 故意不充当密码保险库。恢复 MCPProxy、克隆 Sidekick、重建 `secrets/mcpproxy_admin_key`，必要时恢复 `/data`，然后运行 `docker compose up -d`。
 
-即使 Sidekick 的 SQLite 数据丢失，MCPProxy 仍然是上游配置的权威来源。
+即使 Sidekick 的 SQLite 数据丢失，MCPProxy 仍然是上游配置和 Profiles 的权威来源。
 
 ## 🧪 开发
 

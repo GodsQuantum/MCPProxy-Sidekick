@@ -29,7 +29,7 @@ Sidekick ne remplace pas MCPProxy. MCPProxy reste la source de vérité pour le 
 
 ## 🚀 Installation rapide
 
-Sidekick attend un conteneur MCPProxy déjà actif, nommé `mcpproxy` par défaut.
+Sidekick attend un conteneur **MCPProxy v0.67+** déjà actif, nommé `mcpproxy` par défaut.
 
 ```bash
 git clone https://github.com/GodsQuantum/mcpproxy-sidekick.git
@@ -44,7 +44,7 @@ docker compose up -d
 Routes recommandées :
 
 - `/control/` → Sidekick ;
-- `/oauth-browser/` → Chromium/Selkies protégé par Sidekick ;
+- `/control/oauth-browser/` (ou le chemin équivalent sous votre mount Sidekick) → Chromium/Selkies protégé par Sidekick ;
 - le reste → MCPProxy.
 
 Un exemple Caddy est fourni dans [Caddyfile.example](Caddyfile.example).
@@ -65,7 +65,9 @@ Aucun tunnel SSH ni daemon de callback n’est requis sur le poste client.
 
 ## 👥 Profils
 
-Les profils organisent les upstreams par identité ou rôle. L’isolation réelle des agents est assurée par les Agent Tokens MCPProxy.
+Les profils sont les **Profiles natifs de MCPProxy v0.67+**. Sidekick les lit via `GET /api/v1/profiles` et modifie leurs memberships via l’API de configuration MCPProxy ; SQLite ne contient plus de second catalogue de profils. Chaque profil est accessible via `/mcp/p/<nom>`.
+
+**Mise à niveau depuis Sidekick ≤ v0.1.8 :** les anciennes tables SQLite de profils ne sont plus utilisées au runtime et ne sont pas supprimées silencieusement. Recréez dans MCPProxy tout profil qui n’existerait encore que dans l’ancienne base avant de supprimer cette base.
 
 ## 🪪 Agent Tokens
 
@@ -102,7 +104,7 @@ namespace réseau du conteneur MCPProxy existant
 
 Sidekick n’est volontairement pas un coffre-fort. Restaurer MCPProxy, cloner Sidekick, recréer `secrets/mcpproxy_admin_key`, restaurer éventuellement le volume `/data`, puis lancer `docker compose up -d`.
 
-MCPProxy reste la source de vérité même si la base SQLite de Sidekick est perdue.
+MCPProxy reste la source de vérité pour les upstreams **et les Profiles** même si la base SQLite de Sidekick est perdue.
 
 ## 🧪 Développement
 

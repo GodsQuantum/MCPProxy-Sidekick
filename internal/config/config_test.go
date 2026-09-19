@@ -83,3 +83,17 @@ func TestLoadCanReadAdminKeyFromMCPProxyConfig(t *testing.T) {
 		t.Fatal("admin key was not loaded from config")
 	}
 }
+
+func TestOAuthBrowserDefaultsUnderMountPath(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_MOUNT_PATH", "/control")
+	t.Setenv("SIDEKICK_OAUTH_BROWSER_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OAuthBrowserURL != "/control/oauth-browser/" {
+		t.Fatalf("OAuthBrowserURL=%q", cfg.OAuthBrowserURL)
+	}
+}
