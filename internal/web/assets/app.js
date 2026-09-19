@@ -125,7 +125,7 @@ async function startOAuth(name){
   if(!popup){ toast("Popup blocked. Allow popups for this site and retry."); return; }
   try{
     const result=await api("/api/upstreams/"+encodeURIComponent(name)+"/oauth/start",{method:"POST",body:"{}"});
-    popup.location=result.browser_url; popup.focus(); toast("Complete "+name+" sign-in in the new tab."); setTimeout(load,2500);
+    popup.location=result.browser_url; popup.focus(); toast("Fresh OAuth session started for "+name+". Complete sign-in in the new tab."); setTimeout(load,2500);
   }catch(e){ try{popup.close()}catch{}; toast(e.message); }
 }
 

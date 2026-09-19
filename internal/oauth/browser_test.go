@@ -13,6 +13,8 @@ import (
 
 type fakeStarter struct{}
 
+func (fakeStarter) LogoutOAuth(context.Context, string) error { return nil }
+
 func (fakeStarter) StartOAuth(context.Context, string) (mcpproxy.OAuthStart, error) {
 	return mcpproxy.OAuthStart{AuthURL: "https://provider.example/authorize?x=1"}, nil
 }

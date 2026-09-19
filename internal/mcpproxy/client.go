@@ -67,6 +67,10 @@ func (c *Client) DisableServer(ctx context.Context, name string) error {
 	return c.doJSON(ctx, http.MethodPost, "/api/v1/servers/"+url.PathEscape(name)+"/disable", map[string]any{}, nil)
 }
 
+func (c *Client) LogoutOAuth(ctx context.Context, name string) error {
+	return c.doJSON(ctx, http.MethodPost, "/api/v1/servers/"+url.PathEscape(name)+"/logout", map[string]any{}, nil)
+}
+
 func (c *Client) StartOAuth(ctx context.Context, name string) (OAuthStart, error) {
 	var raw json.RawMessage
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/servers/"+url.PathEscape(name)+"/login", map[string]any{}, &raw); err != nil {

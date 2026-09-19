@@ -14,6 +14,7 @@ import (
 )
 
 type OAuthStarter interface {
+	LogoutOAuth(context.Context, string) error
 	StartOAuth(context.Context, string) (mcpproxy.OAuthStart, error)
 }
 
@@ -66,6 +67,9 @@ type StartResult struct {
 }
 
 func (s Service) Start(ctx context.Context, server string) (StartResult, error) {
+	if err := s.Starter.LogoutOAuth(ctx, server); err != nil {
+		return StartResult{}, fmt.Errorf("reset OAuth session: %w", err)
+	}
 	start, err := s.Starter.StartOAuth(ctx, server)
 	if err != nil {
 		return StartResult{}, err
