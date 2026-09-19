@@ -99,6 +99,29 @@ func TestOAuthBrowserAuthCheckRejectsAnonymous(t *testing.T) {
 	}
 }
 
+func TestOAuthBrowserAuthCheckAcceptsDedicatedCookie(t *testing.T) {
+	keyFile := filepath.Join(t.TempDir(), "admin-key")
+	if err := os.WriteFile(keyFile, []byte("admin-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.NewManager(keyFile, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := authManager.Login("admin-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &Server{Cfg: config.Config{}, Auth: authManager}
+	req := httptest.NewRequest(http.MethodGet, "https://mcp.example.com/auth/check", nil)
+	req.AddCookie(&http.Cookie{Name: "sidekick_oauth_browser", Value: sess.ID, Path: "/oauth-browser/"})
+	rw := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rw, req)
+	if rw.Code != http.StatusNoContent {
+		t.Fatalf("status=%d body=%s", rw.Code, rw.Body.String())
+	}
+}
+
 func TestStateDegradesInsteadOfReturning502(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

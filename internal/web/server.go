@@ -54,7 +54,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.HandleFunc("POST /api/logout", s.requireSession(s.handleLogout))
-	mux.HandleFunc("GET /auth/check", s.requireSession(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	mux.HandleFunc("GET /auth/check", s.handleAuthCheck)
 	mux.HandleFunc("GET /api/state", s.requireSession(s.handleState))
 	mux.HandleFunc("POST /api/upstreams/{name}/credential", s.requireSession(s.requireMutation(s.handleCredential)))
 	mux.HandleFunc("POST /api/upstreams/{name}/oauth/start", s.requireSession(s.requireMutation(s.handleOAuthStart)))
@@ -107,7 +107,26 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.Auth.Delete(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: "sidekick_session", Value: "", Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: "sidekick_oauth_browser", Value: "", Path: "/oauth-browser/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
+	if s.Cfg.DemoMode {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	for _, name := range []string{"sidekick_session", "sidekick_oauth_browser"} {
+		c, err := r.Cookie(name)
+		if err != nil {
+			continue
+		}
+		if _, ok := s.Auth.Validate(c.Value); ok {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+	writeError(w, http.StatusUnauthorized, "authentication required")
 }
 
 func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {

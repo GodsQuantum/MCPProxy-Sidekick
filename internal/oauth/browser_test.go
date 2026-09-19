@@ -19,12 +19,33 @@ func (fakeStarter) StartOAuth(context.Context, string) (mcpproxy.OAuthStart, err
 	return mcpproxy.OAuthStart{AuthURL: "https://provider.example/authorize?x=1"}, nil
 }
 
-func TestBrowserOpenUsesCDPNewTab(t *testing.T) {
-	var method, rawQuery string
+func TestBrowserOpenClearsStaleTabsBeforeCDPNewTab(t *testing.T) {
+	var closed, opened, openedBeforeClose bool
+	var rawQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method = r.Method
-		rawQuery = r.URL.RawQuery
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "tab-1"})
+		switch r.URL.Path {
+		case "/json/list":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"id": "old-tab", "type": "page", "url": "https://stale.example"},
+				{"id": "worker-1", "type": "service_worker"},
+			})
+		case "/json/close/old-tab":
+			if r.Method != http.MethodGet {
+				t.Errorf("close method = %q", r.Method)
+			}
+			closed = true
+			w.WriteHeader(http.StatusOK)
+		case "/json/new":
+			if r.Method != http.MethodPut {
+				t.Errorf("new tab method = %q", r.Method)
+			}
+			openedBeforeClose = !closed
+			opened = true
+			rawQuery = r.URL.RawQuery
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "tab-1"})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
@@ -32,8 +53,11 @@ func TestBrowserOpenUsesCDPNewTab(t *testing.T) {
 	if err := b.Open(context.Background(), "https://provider.example/authorize?x=1"); err != nil {
 		t.Fatal(err)
 	}
-	if method != http.MethodPut {
-		t.Fatalf("method = %q", method)
+	if !closed || !opened {
+		t.Fatalf("closed=%v opened=%v", closed, opened)
+	}
+	if openedBeforeClose {
+		t.Fatal("new OAuth tab opened before stale tab was closed")
 	}
 	if !strings.Contains(rawQuery, "https%3A%2F%2Fprovider.example%2Fauthorize") {
 		t.Fatalf("query = %q", rawQuery)
@@ -43,8 +67,15 @@ func TestBrowserOpenUsesCDPNewTab(t *testing.T) {
 func TestServiceStartReturnsVisibleBrowserURL(t *testing.T) {
 	var opened string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		opened = r.URL.RawQuery
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "tab-1"})
+		switch r.URL.Path {
+		case "/json/list":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		case "/json/new":
+			opened = r.URL.RawQuery
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "tab-1"})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 

@@ -121,12 +121,16 @@ async function restoreOmniRouteMaster(){
 }
 
 async function startOAuth(name){
-  const popup=window.open("/oauth-browser/?pending=1","mcp-oauth-"+name);
+  const popup=window.open("about:blank","mcp-oauth-"+name);
   if(!popup){ toast("Popup blocked. Allow popups for this site and retry."); return; }
+  try{ popup.document.title="Starting OAuth"; popup.document.body.textContent="Starting a fresh OAuth session…"; }catch{}
   try{
     const result=await api("/api/upstreams/"+encodeURIComponent(name)+"/oauth/start",{method:"POST",body:"{}"});
     popup.location=result.browser_url; popup.focus(); toast("Fresh OAuth session started for "+name+". Complete sign-in in the new tab."); setTimeout(load,2500);
-  }catch(e){ toast("OAuth start failed: "+e.message); }
+  }catch(e){
+    try{popup.close()}catch{}
+    toast("OAuth start failed: "+e.message);
+  }
 }
 
 function openCredential(name){

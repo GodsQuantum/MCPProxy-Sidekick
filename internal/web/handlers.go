@@ -133,6 +133,17 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 502, err.Error())
 		return
 	}
+	if c, err := r.Cookie("sidekick_session"); err == nil {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "sidekick_oauth_browser",
+			Value:    c.Value,
+			Path:     "/oauth-browser/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   15 * 60,
+		})
+	}
 	writeJSON(w, 200, result)
 }
 
