@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 )
@@ -13,15 +14,24 @@ func (c *Client) ListAgentTokens(ctx context.Context) ([]AgentToken, error) {
 	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/tokens", nil, &raw); err != nil {
 		return nil, err
 	}
+	return decodeAgentTokens(raw)
+}
+
+func decodeAgentTokens(raw json.RawMessage) ([]AgentToken, error) {
 	var direct []AgentToken
 	if err := json.Unmarshal(raw, &direct); err == nil {
 		return direct, nil
 	}
-	var wrapped struct {
-		Tokens []AgentToken `json:"tokens"`
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, fmt.Errorf("decode agent token inventory: %w", err)
 	}
-	if err := json.Unmarshal(raw, &wrapped); err == nil && wrapped.Tokens != nil {
-		return wrapped.Tokens, nil
+	for _, key := range []string{"tokens", "data"} {
+		if child, ok := obj[key]; ok {
+			if tokens, err := decodeAgentTokens(child); err == nil {
+				return tokens, nil
+			}
+		}
 	}
 	return nil, errors.New("agent token response did not contain a token array")
 }
