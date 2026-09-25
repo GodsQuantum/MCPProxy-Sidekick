@@ -6,6 +6,14 @@ cat >/config/.config/labwc/autostart <<'EOF'
 #!/bin/bash
 (
   while true; do
+    # Chromium persists singleton locks in the profile. After a container recreate,
+    # those locks can point at the old container hostname/PID and block startup.
+    # This loop only reaches this point when the previous Chromium process exited,
+    # so removing the stale singleton metadata here is safe.
+    rm -f \
+      /config/chromium-sidekick-oauth/SingletonCookie \
+      /config/chromium-sidekick-oauth/SingletonLock \
+      /config/chromium-sidekick-oauth/SingletonSocket
     /usr/bin/chromium \
       --no-sandbox \
       --password-store=basic \
