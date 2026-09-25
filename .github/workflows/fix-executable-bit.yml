@@ -1,0 +1,31 @@
+name: Fix executable bit
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/fix-executable-bit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Restore executable bit
+        run: |
+          chmod +x deploy/oauth-browser/90-sidekick-chromium
+          git update-index --chmod=+x deploy/oauth-browser/90-sidekick-chromium
+          if git diff --cached --quiet; then
+            echo "Executable bit already correct."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: preserve OAuth browser init executable bit"
+          git push origin HEAD:main
