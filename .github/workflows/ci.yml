@@ -98,22 +98,14 @@ jobs:
           MCPPROXY_TAG: ${{ steps.latest.outputs.tag }}
         run: |
           set -euo pipefail
-          work="$(mktemp -d)"
-          chmod 0777 "$work"
-          trap 'docker rm -f mcpproxy-contract-test >/dev/null 2>&1 || true; sudo rm -rf "$work"' EXIT
+          response="$(mktemp)"
+          trap 'docker rm -f mcpproxy-contract-test >/dev/null 2>&1 || true; rm -f "$response"' EXIT
           MCPPROXY_TEST_KEY="$(printf '%s' "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" | sha256sum | cut -c1-32)"
-          cat >"$work/mcp_config.json" <<EOF
-          {
-            "listen": "0.0.0.0:8080",
-            "api_key": "$MCPPROXY_TEST_KEY",
-            "mcpServers": [],
-            "update_check": {"enabled": false, "channel": "stable"}
-          }
-          EOF
           docker pull "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
           docker run -d --name mcpproxy-contract-test \
             -p 127.0.0.1:19080:8080 \
-            -v "$work:/root/.mcpproxy" \
+            -e MCPPROXY_LISTEN=0.0.0.0:8080 \
+            -e MCPPROXY_API_KEY="$MCPPROXY_TEST_KEY" \
             "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
           for i in {1..30}; do
             if curl -fsS http://127.0.0.1:19080/healthz >/dev/null; then
@@ -121,9 +113,12 @@ jobs:
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:19080/healthz >/dev/null
+          if ! curl -fsS http://127.0.0.1:19080/healthz >/dev/null; then
+            docker logs mcpproxy-contract-test
+            exit 1
+          fi
           for endpoint in servers profiles tokens; do
-            code="$(curl -sS -o "$work/response" -w '%{http_code}' \
+            code="$(curl -sS -o "$response" -w '%{http_code}' \
               -H "X-API-Key: $MCPPROXY_TEST_KEY" \
               "http://127.0.0.1:19080/api/v1/$endpoint")"
             test "$code" = "200"
