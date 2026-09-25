@@ -99,23 +99,33 @@ jobs:
         run: |
           set -euo pipefail
           work="$(mktemp -d)"
-          trap 'docker rm -f mcpproxy-contract-test >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
-          cat >"$work/mcp_config.json" <<'EOF'
+          chmod 0777 "$work"
+          trap 'docker rm -f mcpproxy-contract-test >/dev/null 2>&1 || true; sudo rm -rf "$work"' EXIT
+          MCPPROXY_TEST_KEY="$(printf '%s' "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" | sha256sum | cut -c1-32)"
+          cat >"$work/mcp_config.json" <<EOF
           {
             "listen": "0.0.0.0:8080",
-            "api_key": "ci-contract-key",
+            "api_key": "$MCPPROXY_TEST_KEY",
             "mcpServers": [],
             "update_check": {"enabled": false, "channel": "stable"}
           }
           EOF
           docker pull "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
-          docker run -d --name mcpproxy-contract-test             -p 127.0.0.1:19080:8080             -v "$work:/root/.mcpproxy"             "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
+          docker run -d --name mcpproxy-contract-test \
+            -p 127.0.0.1:19080:8080 \
+            -v "$work:/root/.mcpproxy" \
+            "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
           for i in {1..30}; do
-            curl -fsS http://127.0.0.1:19080/healthz >/dev/null && break
+            if curl -fsS http://127.0.0.1:19080/healthz >/dev/null; then
+              break
+            fi
             sleep 1
           done
+          curl -fsS http://127.0.0.1:19080/healthz >/dev/null
           for endpoint in servers profiles tokens; do
-            code="$(curl -sS -o "$work/response" -w '%{http_code}'               -H 'X-API-Key: ci-contract-key'               "http://127.0.0.1:19080/api/v1/$endpoint")"
+            code="$(curl -sS -o "$work/response" -w '%{http_code}' \
+              -H "X-API-Key: $MCPPROXY_TEST_KEY" \
+              "http://127.0.0.1:19080/api/v1/$endpoint")"
             test "$code" = "200"
           done
 
