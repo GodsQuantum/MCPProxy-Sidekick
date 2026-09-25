@@ -5,6 +5,9 @@ on:
     branches: ["main"]
     tags: ["v*"]
   pull_request:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -79,6 +82,42 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  mcpproxy-latest-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve latest stable MCPProxy
+        id: latest
+        run: |
+          tag="$(curl -fsSL https://api.github.com/repos/smart-mcp-proxy/mcpproxy-go/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+          test -n "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Testing MCPProxy $tag"
+      - name: Verify Sidekick REST contract against latest stable
+        env:
+          MCPPROXY_TAG: ${{ steps.latest.outputs.tag }}
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          trap 'docker rm -f mcpproxy-contract-test >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+          cat >"$work/mcp_config.json" <<'EOF'
+          {
+            "listen": "0.0.0.0:8080",
+            "api_key": "ci-contract-key",
+            "mcpServers": [],
+            "update_check": {"enabled": false, "channel": "stable"}
+          }
+          EOF
+          docker pull "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
+          docker run -d --name mcpproxy-contract-test             -p 127.0.0.1:19080:8080             -v "$work:/root/.mcpproxy"             "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:19080/healthz >/dev/null && break
+            sleep 1
+          done
+          for endpoint in servers profiles tokens; do
+            code="$(curl -sS -o "$work/response" -w '%{http_code}'               -H 'X-API-Key: ci-contract-key'               "http://127.0.0.1:19080/api/v1/$endpoint")"
+            test "$code" = "200"
+          done
 
   codeql:
     runs-on: ubuntu-latest
