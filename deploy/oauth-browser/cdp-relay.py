@@ -8,6 +8,15 @@ TARGET_HOST = os.environ.get("SIDEKICK_CDP_TARGET_HOST", "127.0.0.1")
 TARGET_PORT = int(os.environ.get("SIDEKICK_CDP_TARGET_PORT", "9222"))
 
 
+def rewrite_host(request_head, target_host=TARGET_HOST, target_port=TARGET_PORT):
+    lines = request_head.split(b"\r\n")
+    for index, line in enumerate(lines):
+        if line.lower().startswith(b"host:"):
+            lines[index] = f"Host: {target_host}:{target_port}".encode()
+            break
+    return b"\r\n".join(lines)
+
+
 async def pump(reader, writer):
     try:
         while True:
@@ -31,10 +40,14 @@ async def handle(client_reader, client_writer):
         upstream_reader, upstream_writer = await asyncio.open_connection(
             TARGET_HOST, TARGET_PORT
         )
-    except OSError:
+        request_head = await client_reader.readuntil(b"\r\n\r\n")
+    except (OSError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
         client_writer.close()
         await client_writer.wait_closed()
         return
+
+    upstream_writer.write(rewrite_host(request_head))
+    await upstream_writer.drain()
 
     await asyncio.gather(
         pump(client_reader, upstream_writer),
@@ -49,4 +62,5 @@ async def main():
         await server.serve_forever()
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
