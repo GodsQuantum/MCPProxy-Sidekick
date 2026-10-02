@@ -35,6 +35,7 @@ func (b Browser) clearPageTargets(ctx context.Context, client *http.Client, base
 	if err != nil {
 		return err
 	}
+	req.Close = true
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -59,14 +60,20 @@ func (b Browser) clearPageTargets(ctx context.Context, client *http.Client, base
 		if err != nil {
 			return err
 		}
+		closeReq.Close = true
 		closeResp, err := client.Do(closeReq)
 		if err != nil {
-			return err
+			// Stale page cleanup is best-effort. A target may disappear between
+			// /json/list and /json/close; the subsequent /json/new is the
+			// authoritative CDP operation and will still fail if CDP is broken.
+			continue
 		}
 		_, _ = io.Copy(io.Discard, io.LimitReader(closeResp.Body, 2048))
 		closeResp.Body.Close()
 		if closeResp.StatusCode < 200 || closeResp.StatusCode >= 300 {
-			return fmt.Errorf("CDP close stale tab %q: HTTP %d", target.ID, closeResp.StatusCode)
+			// Chromium can race page teardown and answer 5xx/404 for a target
+			// that was valid moments earlier. Do not block OAuth on stale cleanup.
+			continue
 		}
 	}
 	return nil
@@ -91,6 +98,7 @@ func (b Browser) Open(ctx context.Context, authURL string) error {
 	if err != nil {
 		return err
 	}
+	req.Close = true
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
