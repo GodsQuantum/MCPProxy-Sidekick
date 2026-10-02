@@ -19,7 +19,7 @@ services:
       SIDEKICK_MOUNT_PATH: "${SIDEKICK_MOUNT_PATH:-/control}"
       SIDEKICK_ALLOWED_HOSTS: "${SIDEKICK_ALLOWED_HOSTS:-mcp.example.com}"
       SIDEKICK_DB_PATH: "/data/sidekick.db"
-      SIDEKICK_OAUTH_CDP_URL: "http://127.0.0.1:9222"
+      SIDEKICK_OAUTH_CDP_URL: "${SIDEKICK_OAUTH_CDP_URL:-http://127.0.0.1:9222}"
       SIDEKICK_OAUTH_BROWSER_URL: "${SIDEKICK_OAUTH_BROWSER_URL:-/control/oauth-browser/}"
       SIDEKICK_SESSION_LIFETIME: "${SIDEKICK_SESSION_LIFETIME:-720h}"
       SIDEKICK_POSTIZ_BASE_URL: "${SIDEKICK_POSTIZ_BASE_URL:-}"
@@ -50,6 +50,11 @@ services:
       SUBFOLDER: "/control/oauth-browser/"
       TITLE: "MCPProxy Sidekick OAuth"
       CHROME_CLI: "--user-data-dir=/config/chromium-sidekick-oauth --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --no-first-run --no-default-browser-check about:blank"
+      SIDEKICK_CDP_RELAY_ENABLE: "${SIDEKICK_CDP_RELAY_ENABLE:-false}"
+      SIDEKICK_CDP_RELAY_HOST: "${SIDEKICK_CDP_RELAY_HOST:-0.0.0.0}"
+      SIDEKICK_CDP_RELAY_PORT: "${SIDEKICK_CDP_RELAY_PORT:-9223}"
+      SIDEKICK_CDP_TARGET_HOST: "${SIDEKICK_CDP_TARGET_HOST:-127.0.0.1}"
+      SIDEKICK_CDP_TARGET_PORT: "${SIDEKICK_CDP_TARGET_PORT:-9222}"
     volumes:
       - oauth-browser-data:/config
       - ./deploy/oauth-browser:/custom-cont-init.d:ro
