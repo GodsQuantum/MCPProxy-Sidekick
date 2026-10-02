@@ -27,6 +27,7 @@ type Config struct {
 	PaperlessEndpoint    string
 	ImmichKeyDir         string
 	OmniRouteDB          string
+	YouTubeOAuthControlURL string
 	DemoMode             bool
 }
 
@@ -50,6 +51,7 @@ func Load() (Config, error) {
 		PaperlessEndpoint:    strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
 		ImmichKeyDir:         strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
 		OmniRouteDB:          strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
+		YouTubeOAuthControlURL: strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL")), "/"),
 		DemoMode:             parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
 	}
 	mountPath := strings.TrimSpace(os.Getenv("SIDEKICK_MOUNT_PATH"))
