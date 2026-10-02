@@ -101,6 +101,8 @@ your browser
 
 Your client machine needs no SSH tunnel, callback daemon or local helper.
 
+If Sidekick and the OAuth browser use a normal Docker bridge instead of sharing the MCPProxy network namespace, Chromium may still bind DevTools to loopback. Set `SIDEKICK_CDP_RELAY_ENABLE=true` on the OAuth browser and point `SIDEKICK_OAUTH_CDP_URL` at `http://<oauth-browser-service>:9223`. The relay helper is versioned under `deploy/oauth-browser/lib/` and installed into `/config` by the single top-level init script; do not leave backup or helper executables beside that init script in `/custom-cont-init.d`.
+
 Connectors with their own clean remote OAuth/device-code flow can still use that native flow instead. For FastMCP/OIDC-proxy interoperability, see [FastMCP OAuth interoperability](docs/fastmcp-oauth.md), including the security constraints around `require_authorization_consent="external"`.
 
 ## 👥 Profiles
@@ -192,6 +194,8 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_MOUNT_PATH | /control | Reverse-proxy mount path. Change this to /command or another prefix if desired. |
 | SIDEKICK_ALLOWED_HOSTS | mcp.example.com | Trusted browser Host/Origin values. |
 | SIDEKICK_SESSION_LIFETIME | 720h | Admin session lifetime. |
+| SIDEKICK_OAUTH_CDP_URL | http://127.0.0.1:9222 | Chromium DevTools endpoint. With a separate browser network namespace and the relay enabled, use `http://oauth-browser:9223`. |
+| SIDEKICK_CDP_RELAY_ENABLE | false | Opt-in DevTools relay for bridge-network deployments where Chromium remains loopback-bound. |
 | SIDEKICK_POSTIZ_BASE_URL | empty | Optional Postiz MCP base URL for URL-key auth. |
 | SIDEKICK_PAPERLESS_ENDPOINT | empty | Optional shared Paperless MCP endpoint. |
 | SIDEKICK_OMNIROUTE_DB | empty | Optional read-only OmniRoute SQLite path used to restore the active Master key. |
