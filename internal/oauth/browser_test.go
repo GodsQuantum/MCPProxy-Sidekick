@@ -21,10 +21,12 @@ func (fakeStarter) StartOAuth(context.Context, string) (mcpproxy.OAuthStart, err
 
 func TestBrowserOpenClearsStaleTabsBeforeCDPNewTab(t *testing.T) {
 	var closed, opened, openedBeforeClose bool
+	var listClose, closeClose, newClose bool
 	var rawQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/json/list":
+			listClose = r.Close
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{"id": "old-tab", "type": "page", "url": "https://stale.example"},
 				{"id": "worker-1", "type": "service_worker"},
@@ -33,12 +35,14 @@ func TestBrowserOpenClearsStaleTabsBeforeCDPNewTab(t *testing.T) {
 			if r.Method != http.MethodGet {
 				t.Errorf("close method = %q", r.Method)
 			}
+			closeClose = r.Close
 			closed = true
 			w.WriteHeader(http.StatusOK)
 		case "/json/new":
 			if r.Method != http.MethodPut {
 				t.Errorf("new tab method = %q", r.Method)
 			}
+			newClose = r.Close
 			openedBeforeClose = !closed
 			opened = true
 			rawQuery = r.URL.RawQuery
@@ -59,8 +63,39 @@ func TestBrowserOpenClearsStaleTabsBeforeCDPNewTab(t *testing.T) {
 	if openedBeforeClose {
 		t.Fatal("new OAuth tab opened before stale tab was closed")
 	}
+	if !listClose || !closeClose || !newClose {
+		t.Fatalf("CDP requests must disable keep-alive: list=%v close=%v new=%v", listClose, closeClose, newClose)
+	}
 	if !strings.Contains(rawQuery, "https%3A%2F%2Fprovider.example%2Fauthorize") {
 		t.Fatalf("query = %q", rawQuery)
+	}
+}
+
+func TestBrowserOpenIgnoresStaleTabCloseRace(t *testing.T) {
+	var opened bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/json/list":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"id": "vanished-tab", "type": "page", "url": "https://stale.example"},
+			})
+		case "/json/close/vanished-tab":
+			http.Error(w, "No such target", http.StatusInternalServerError)
+		case "/json/new":
+			opened = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "tab-1"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	b := Browser{CDPBaseURL: srv.URL, PublicSessionURL: "/oauth-browser/"}
+	if err := b.Open(context.Background(), "https://provider.example/authorize?x=1"); err != nil {
+		t.Fatal(err)
+	}
+	if !opened {
+		t.Fatal("new OAuth tab was not opened after stale close race")
 	}
 }
 
