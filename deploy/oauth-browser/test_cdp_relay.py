@@ -18,6 +18,7 @@ class RewriteHostTests(unittest.TestCase):
         )
         result = MODULE.rewrite_host(request)
         self.assertIn(b"Host: 127.0.0.1:9222\r\n", result)
+        self.assertIn(b"Connection: close\r\n", result)
         self.assertNotIn(b"Host: oauth-browser:9223", result)
 
     def test_host_match_is_case_insensitive(self):
