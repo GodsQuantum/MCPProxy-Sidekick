@@ -11,6 +11,7 @@ import (
 	omnirouteadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/omniroute"
 	paperlessadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/paperless"
 	postizadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/postiz"
+	youtubeoauthadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/youtubeoauth"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/storage"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
@@ -41,6 +42,15 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		toks = nil
 	}
 	pm := profileMap(ps)
+	var youtubeOAuth youtubeoauthadapter.Status
+	var youtubeOAuthErr error
+	if strings.TrimSpace(s.Cfg.YouTubeOAuthControlURL) != "" {
+		youtubeOAuth, youtubeOAuthErr = (youtubeoauthadapter.Adapter{BaseURL: s.Cfg.YouTubeOAuthControlURL}).Status(r.Context())
+		if youtubeOAuthErr != nil {
+			log.Printf("sidekick state: YouTube OAuth helper unavailable: %v", youtubeOAuthErr)
+			warnings = append(warnings, "YouTube OAuth helper is temporarily unavailable")
+		}
+	}
 	safe := make([]safeUpstream, 0, len(servers))
 	connected, tools, authNeeded, quarantined := 0, 0, 0, 0
 	for _, srv := range servers {
@@ -54,6 +64,29 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		if st == "" {
 			st = srv.Health.Summary
 		}
+		oauthEnabled := len(srv.OAuth) > 0
+		authenticated := srv.Authenticated
+		if strings.TrimSpace(s.Cfg.YouTubeOAuthControlURL) != "" && youtubeoauthadapter.MatchesServer(srv.Name) {
+			oauthEnabled = true
+			if youtubeOAuthErr == nil {
+				configured = youtubeOAuth.Configured && youtubeOAuth.CompleteConfigured
+				authenticated = configured
+				if configured {
+					preview = "OAuth connected"
+					if strings.TrimSpace(youtubeOAuth.Handle) != "" {
+						preview += " · " + youtubeOAuth.Handle
+					}
+				} else {
+					preview = "OAuth not connected"
+					st = "auth required"
+				}
+			} else {
+				configured = false
+				authenticated = false
+				preview = "OAuth helper unavailable"
+				st = "auth helper unavailable"
+			}
+		}
 		if strings.Contains(strings.ToLower(st), "ready") || strings.Contains(strings.ToLower(st), "connected") {
 			connected++
 		}
@@ -64,7 +97,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 			quarantined++
 		}
 		tools += srv.ToolCount
-		safe = append(safe, safeUpstream{Name: srv.Name, Enabled: srv.Enabled, Status: st, Protocol: srv.Protocol, ToolCount: srv.ToolCount, Authenticated: srv.Authenticated, Quarantined: srv.Quarantined, OAuth: len(srv.OAuth) > 0, CredentialConfigured: configured, CredentialPreview: preview, Profiles: pm[srv.Name]})
+		safe = append(safe, safeUpstream{Name: srv.Name, Enabled: srv.Enabled, Status: st, Protocol: srv.Protocol, ToolCount: srv.ToolCount, Authenticated: authenticated, Quarantined: srv.Quarantined, OAuth: oauthEnabled, CredentialConfigured: configured, CredentialPreview: preview, Profiles: pm[srv.Name]})
 	}
 	writeJSON(w, 200, map[string]any{
 		"summary":   map[string]int{"total": len(safe), "connected": connected, "tools": tools, "auth_required": authNeeded, "quarantined": quarantined},
@@ -127,6 +160,19 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
 		writeError(w, 400, "missing server name")
+		return
+	}
+	if strings.TrimSpace(s.Cfg.YouTubeOAuthControlURL) != "" && youtubeoauthadapter.MatchesServer(name) {
+		start, err := (youtubeoauthadapter.Adapter{BaseURL: s.Cfg.YouTubeOAuthControlURL}).Start(r.Context())
+		if err != nil {
+			writeError(w, 502, err.Error())
+			return
+		}
+		if err := s.OAuth.Browser.Open(r.Context(), start.AuthURL); err != nil {
+			writeError(w, 502, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"browser_url": s.OAuth.Browser.SessionURL(), "provider": "youtube", "profile": "full"})
 		return
 	}
 	result, err := s.OAuth.Start(r.Context(), name)

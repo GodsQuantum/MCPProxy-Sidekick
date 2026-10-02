@@ -15,6 +15,7 @@ import (
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/config"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/oauth"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/storage"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
 )
@@ -316,5 +317,133 @@ func TestNativeProfileCRUDAndPinnedTokenGuard(t *testing.T) {
 	}
 	if len(profiles) != 1 || profiles[0].Name != "web" {
 		t.Fatalf("profiles after expired-token delete=%#v", profiles)
+	}
+}
+
+func TestYouTubeOAuthAdapterAppearsAsOAuthAndStartsInternalFlow(t *testing.T) {
+	keyFile := filepath.Join(t.TempDir(), "admin-key")
+	if err := os.WriteFile(keyFile, []byte("admin-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var helperStarts int
+	helper := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"configured": true, "complete_configured": true, "profile": "full",
+				"handle": "@arezkisugar", "channel_id": "UCYTt6PHzwioAWOYZckBdFBg",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/start":
+			helperStarts++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"auth_url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
+				"configured": true, "complete_configured": true, "profile": "full",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer helper.Close()
+
+	proxyAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/servers":
+			_ = json.NewEncoder(w).Encode([]mcpproxy.Server{{
+				Name: "youtube-arezki", Enabled: true, Status: "ready", ToolCount: 97,
+			}})
+		case "/api/v1/profiles":
+			_ = json.NewEncoder(w).Encode(map[string]any{"profiles": []mcpproxy.Profile{}})
+		case "/api/v1/tokens":
+			_ = json.NewEncoder(w).Encode(map[string]any{"tokens": []mcpproxy.AgentToken{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer proxyAPI.Close()
+
+	var openedURL string
+	cdp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/json/list":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		case r.Method == http.MethodPut && r.URL.Path == "/json/new":
+			openedURL = r.URL.RawQuery
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "oauth"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer cdp.Close()
+
+	proxy, err := mcpproxy.NewClient(proxyAPI.URL, keyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.NewManager(keyFile, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := storage.Open(filepath.Join(t.TempDir(), "sidekick.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	app := &Server{
+		Cfg: config.Config{
+			AllowedHosts: []string{"mcp.example.com"},
+			YouTubeOAuthControlURL: helper.URL,
+		},
+		Auth: authManager, Proxy: proxy, Store: store,
+		Credentials: credentials.Service{Editor: proxy},
+		Tokens:      tokens.Service{Backend: proxy},
+		OAuth: oauth.Service{Browser: oauth.Browser{
+			CDPBaseURL: cdp.URL, PublicSessionURL: "/control/oauth-browser/",
+		}},
+	}
+	h := app.Handler()
+
+	login := httptest.NewRequest(http.MethodPost, "https://mcp.example.com/api/login", bytes.NewBufferString(`{"key":"admin-key"}`))
+	login.Header.Set("Content-Type", "application/json")
+	lw := httptest.NewRecorder()
+	h.ServeHTTP(lw, login)
+	if lw.Code != http.StatusOK {
+		t.Fatalf("login status=%d body=%s", lw.Code, lw.Body.String())
+	}
+	var loginBody struct{ CSRF string `json:"csrf"` }
+	if err := json.Unmarshal(lw.Body.Bytes(), &loginBody); err != nil {
+		t.Fatal(err)
+	}
+	session := lw.Result().Cookies()[0]
+
+	stateReq := httptest.NewRequest(http.MethodGet, "https://mcp.example.com/api/state", nil)
+	stateReq.AddCookie(session)
+	stateRW := httptest.NewRecorder()
+	h.ServeHTTP(stateRW, stateReq)
+	if stateRW.Code != http.StatusOK {
+		t.Fatalf("state status=%d body=%s", stateRW.Code, stateRW.Body.String())
+	}
+	body := stateRW.Body.String()
+	for _, want := range []string{`"oauth":true`, `"authenticated":true`, `OAuth connected · @arezkisugar`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q in state: %s", want, body)
+		}
+	}
+
+	startReq := httptest.NewRequest(http.MethodPost, "https://mcp.example.com/api/upstreams/youtube-arezki/oauth/start", strings.NewReader("{}"))
+	startReq.Header.Set("Content-Type", "application/json")
+	startReq.Header.Set("X-CSRF-Token", loginBody.CSRF)
+	startReq.Header.Set("Origin", "https://mcp.example.com")
+	startReq.AddCookie(session)
+	startRW := httptest.NewRecorder()
+	h.ServeHTTP(startRW, startReq)
+	if startRW.Code != http.StatusOK {
+		t.Fatalf("oauth start status=%d body=%s", startRW.Code, startRW.Body.String())
+	}
+	if helperStarts != 1 || openedURL == "" {
+		t.Fatalf("helperStarts=%d openedURL=%q", helperStarts, openedURL)
+	}
+	if !strings.Contains(startRW.Body.String(), "/control/oauth-browser/") {
+		t.Fatalf("browser URL missing: %s", startRW.Body.String())
 	}
 }

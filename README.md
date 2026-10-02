@@ -195,6 +195,7 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_POSTIZ_BASE_URL | empty | Optional Postiz MCP base URL for URL-key auth. |
 | SIDEKICK_PAPERLESS_ENDPOINT | empty | Optional shared Paperless MCP endpoint. |
 | SIDEKICK_OMNIROUTE_DB | empty | Optional read-only OmniRoute SQLite path used to restore the active Master key. |
+| SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL | empty | Optional internal helper URL for MCPs that manage Google/YouTube OAuth inside the upstream process. When set, `youtube-arezki` and `youtube-creator-arezki` appear in Sidekick OAuth with real Connect/Reconnect status. |
 | PUID / PGID | 1000 / 1000 | LinuxServer Chromium profile ownership. |
 | TZ | UTC | OAuth browser timezone. |
 
