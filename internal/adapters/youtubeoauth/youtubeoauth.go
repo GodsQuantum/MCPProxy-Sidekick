@@ -109,19 +109,22 @@ func (a Adapter) do(ctx context.Context, method, u string, body any, out any) er
 }
 
 func MatchesServer(name string) bool {
-	switch strings.TrimSpace(name) {
-	case "youtube-developer", "youtube-creator-developer":
-		return true
-	default:
-		return false
+	name = strings.TrimSpace(name)
+	if strings.HasPrefix(name, "youtube-creator-") {
+		return len(strings.TrimPrefix(name, "youtube-creator-")) > 0
 	}
+	if strings.HasPrefix(name, "youtube-") {
+		return len(strings.TrimPrefix(name, "youtube-")) > 0
+	}
+	return false
 }
 
 func ConnectedForServer(name string, st Status) bool {
-	switch strings.TrimSpace(name) {
-	case "youtube-creator-developer":
+	name = strings.TrimSpace(name)
+	switch {
+	case strings.HasPrefix(name, "youtube-creator-") && len(strings.TrimPrefix(name, "youtube-creator-")) > 0:
 		return st.Configured
-	case "youtube-developer":
+	case strings.HasPrefix(name, "youtube-") && len(strings.TrimPrefix(name, "youtube-")) > 0:
 		return st.CompleteConfigured
 	default:
 		return false
