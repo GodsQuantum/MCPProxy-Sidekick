@@ -36,6 +36,7 @@ jobs:
           node --check scripts/fake-mcpproxy.mjs
           bash -n deploy/oauth-browser/90-sidekick-chromium
           python3 -m py_compile deploy/oauth-browser/cdp-relay.py
+          python3 deploy/oauth-browser/test_cdp_relay.py
           unexpected="$(find deploy/oauth-browser -maxdepth 1 -type f -perm /111 ! -name '90-sidekick-chromium' -print)"
           test -z "$unexpected"
       - name: Build Sidekick for browser smoke
