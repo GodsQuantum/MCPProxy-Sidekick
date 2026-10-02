@@ -27,7 +27,7 @@ It does not replace MCPProxy. MCPProxy remains the source of truth for routing, 
 - **Dynamic upstream inventory** — add a new MCP server to MCPProxy and it appears automatically.
 - **Credential state you can actually see** — configured secrets show a masked preview such as <code>abcd••••wxyz</code>; full values are never returned by Sidekick.
 - **Generic credential editor** — Bearer, <code>X-API-Key</code> or a custom header for ordinary MCP servers.
-- **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases and per-process Immich keys.
+- **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases, per-process Immich keys, and upstream-managed YouTube OAuth.
 - **OAuth that gives you somewhere to click** — a visible browser tab opens immediately. Loopback-bound providers use the protected Cloud browser.
 - **Profiles** — group upstreams by identity, role or project.
 - **MCPProxy Agent Tokens** — scope agents to named upstreams and read / write / destructive permission tiers, including MCPProxy <code>profile_pin</code>.
@@ -195,6 +195,7 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_POSTIZ_BASE_URL | empty | Optional Postiz MCP base URL for URL-key auth. |
 | SIDEKICK_PAPERLESS_ENDPOINT | empty | Optional shared Paperless MCP endpoint. |
 | SIDEKICK_OMNIROUTE_DB | empty | Optional read-only OmniRoute SQLite path used to restore the active Master key. |
+| SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL | empty | Optional internal helper URL for YouTube MCPs whose Google OAuth is managed inside the upstream process. |
 | PUID / PGID | 1000 / 1000 | LinuxServer Chromium profile ownership. |
 | TZ | UTC | OAuth browser timezone. |
 
