@@ -11,23 +11,24 @@ import (
 )
 
 type Config struct {
-	ListenAddr           string
-	MCPProxyBaseURL      string
-	MCPProxyAdminKeyFile string
-	MCPProxyConfigFile   string
-	MCPProxyAdminKey     string
-	PublicBaseURL        string
-	MountPath            string
-	DBPath               string
-	AllowedHosts         []string
-	SessionLifetime      time.Duration
-	OAuthCDPURL          string
-	OAuthBrowserURL      string
-	PostizBaseURL        string
-	PaperlessEndpoint    string
-	ImmichKeyDir         string
-	OmniRouteDB          string
-	DemoMode             bool
+	ListenAddr             string
+	MCPProxyBaseURL        string
+	MCPProxyAdminKeyFile   string
+	MCPProxyConfigFile     string
+	MCPProxyAdminKey       string
+	PublicBaseURL          string
+	MountPath              string
+	DBPath                 string
+	AllowedHosts           []string
+	SessionLifetime        time.Duration
+	OAuthCDPURL            string
+	OAuthBrowserURL        string
+	PostizBaseURL          string
+	PaperlessEndpoint      string
+	ImmichKeyDir           string
+	OmniRouteDB            string
+	YouTubeOAuthControlURL string
+	DemoMode               bool
 }
 
 func Load() (Config, error) {
@@ -36,21 +37,22 @@ func Load() (Config, error) {
 		return Config{}, errors.New("invalid SIDEKICK_SESSION_LIFETIME")
 	}
 	cfg := Config{
-		ListenAddr:           envOr("SIDEKICK_LISTEN_ADDR", ":8081"),
-		MCPProxyBaseURL:      strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_URL")), "/"),
-		MCPProxyAdminKeyFile: strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE")),
-		MCPProxyConfigFile:   strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_CONFIG_FILE")),
-		PublicBaseURL:        strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_PUBLIC_BASE_URL")), "/"),
-		DBPath:               envOr("SIDEKICK_DB_PATH", "/data/sidekick.db"),
-		AllowedHosts:         splitCSV(os.Getenv("SIDEKICK_ALLOWED_HOSTS")),
-		SessionLifetime:      lifetime,
-		OAuthCDPURL:          envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
-		OAuthBrowserURL:      strings.TrimSpace(os.Getenv("SIDEKICK_OAUTH_BROWSER_URL")),
-		PostizBaseURL:        strings.TrimSpace(os.Getenv("SIDEKICK_POSTIZ_BASE_URL")),
-		PaperlessEndpoint:    strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
-		ImmichKeyDir:         strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
-		OmniRouteDB:          strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
-		DemoMode:             parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
+		ListenAddr:             envOr("SIDEKICK_LISTEN_ADDR", ":8081"),
+		MCPProxyBaseURL:        strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_URL")), "/"),
+		MCPProxyAdminKeyFile:   strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE")),
+		MCPProxyConfigFile:     strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_CONFIG_FILE")),
+		PublicBaseURL:          strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_PUBLIC_BASE_URL")), "/"),
+		DBPath:                 envOr("SIDEKICK_DB_PATH", "/data/sidekick.db"),
+		AllowedHosts:           splitCSV(os.Getenv("SIDEKICK_ALLOWED_HOSTS")),
+		SessionLifetime:        lifetime,
+		OAuthCDPURL:            envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
+		OAuthBrowserURL:        strings.TrimSpace(os.Getenv("SIDEKICK_OAUTH_BROWSER_URL")),
+		PostizBaseURL:          strings.TrimSpace(os.Getenv("SIDEKICK_POSTIZ_BASE_URL")),
+		PaperlessEndpoint:      strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
+		ImmichKeyDir:           strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
+		OmniRouteDB:            strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
+		YouTubeOAuthControlURL: strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL")), "/"),
+		DemoMode:               parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
 	}
 	mountPath := strings.TrimSpace(os.Getenv("SIDEKICK_MOUNT_PATH"))
 	if mountPath == "" && cfg.PublicBaseURL != "" {
