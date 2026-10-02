@@ -17,7 +17,7 @@ func TestAdapterStatusAndStart(t *testing.T) {
 				"configured":          true,
 				"complete_configured": true,
 				"profile":             "full",
-				"handle":              "@arezkisugar",
+				"handle":              "@examplecreator",
 			})
 		case r.Method == http.MethodPost && r.URL.Path == "/start":
 			starts++
@@ -38,7 +38,7 @@ func TestAdapterStatusAndStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.Configured || !st.CompleteConfigured || st.Handle != "@arezkisugar" {
+	if !st.Configured || !st.CompleteConfigured || st.Handle != "@examplecreator" {
 		t.Fatalf("unexpected status: %#v", st)
 	}
 	start, err := a.Start(context.Background())
@@ -52,17 +52,20 @@ func TestAdapterStatusAndStart(t *testing.T) {
 
 func TestConnectedForServer(t *testing.T) {
 	st := Status{Configured: true, CompleteConfigured: false}
-	if !ConnectedForServer("youtube-creator-arezki", st) {
+	if !ConnectedForServer("youtube-creator-primary", st) {
 		t.Fatal("creator should use creator token status")
 	}
-	if ConnectedForServer("youtube-arezki", st) {
+	if ConnectedForServer("youtube-primary", st) {
 		t.Fatal("complete should use complete bundle status")
 	}
 	st.CompleteConfigured = true
-	if !ConnectedForServer("youtube-arezki", st) {
+	if !ConnectedForServer("youtube-primary", st) {
 		t.Fatal("complete should be connected once bundle exists")
 	}
-	if ConnectedForServer("youtube-other", st) {
+	if ConnectedForServer("video-primary", st) {
 		t.Fatal("unexpected match")
+	}
+	if MatchesServer("youtube-") || MatchesServer("youtube-creator-") {
+		t.Fatal("empty identity suffix should not match")
 	}
 }
