@@ -9,12 +9,23 @@ TARGET_PORT = int(os.environ.get("SIDEKICK_CDP_TARGET_PORT", "9222"))
 
 
 def rewrite_host(request_head, target_host=TARGET_HOST, target_port=TARGET_PORT):
-    lines = request_head.split(b"\r\n")
+    # Chromium rejects non-local Host values on the DevTools HTTP endpoint.
+    # The relay handles one request per TCP connection, so also force the
+    # upstream response to close the connection. This prevents HTTP clients
+    # from reusing the socket for a second request whose Host would bypass
+    # this first-request rewrite.
+    lines = request_head.rstrip(b"\r\n").split(b"\r\n")
+    saw_connection = False
     for index, line in enumerate(lines):
-        if line.lower().startswith(b"host:"):
+        lower = line.lower()
+        if lower.startswith(b"host:"):
             lines[index] = f"Host: {target_host}:{target_port}".encode()
-            break
-    return b"\r\n".join(lines)
+        elif lower.startswith(b"connection:"):
+            lines[index] = b"Connection: close"
+            saw_connection = True
+    if not saw_connection:
+        lines.append(b"Connection: close")
+    return b"\r\n".join(lines) + b"\r\n\r\n"
 
 
 async def pump(reader, writer):
