@@ -3,30 +3,30 @@ set -euo pipefail
 
 install -d -o abc -g abc   /config/.config/labwc   /config/chromium-sidekick-oauth   /config/.local/bin
 
+cat >/config/.config/labwc/autostart <<'EOF'
+#!/bin/bash
+EOF
+
 if [[ "${SIDEKICK_CDP_RELAY_ENABLE:-false}" == "true" ]]; then
-  install -m 0755 -o abc -g abc     /custom-cont-init.d/lib/cdp-relay.py     /config/.local/bin/sidekick-cdp-relay.py
+  install -m 0755 -o abc -g abc     /opt/sidekick/cdp-relay.py     /config/.local/bin/sidekick-cdp-relay.py
+  cat >>/config/.config/labwc/autostart <<'EOF'
+(
+  while true; do
+    /lsiopy/bin/python3 /config/.local/bin/sidekick-cdp-relay.py
+    sleep 2
+  done
+) &
+EOF
 else
   rm -f /config/.local/bin/sidekick-cdp-relay.py
 fi
 
-cat >/config/.config/labwc/autostart <<'EOF'
-#!/bin/bash
-
-if [[ "${SIDEKICK_CDP_RELAY_ENABLE:-false}" == "true" ]]; then
-  (
-    while true; do
-      /lsiopy/bin/python3 /config/.local/bin/sidekick-cdp-relay.py
-      sleep 2
-    done
-  ) &
-fi
-
+cat >>/config/.config/labwc/autostart <<'EOF'
 (
   while true; do
     # Chromium persists singleton locks in the profile. After a container recreate,
     # those locks can point at the old container hostname/PID and block startup.
-    # This loop only reaches this point when the previous Chromium process exited,
-    # so removing the stale singleton metadata here is safe.
+    # This loop only reaches this point when the previous Chromium process exited.
     rm -f       /config/chromium-sidekick-oauth/SingletonCookie       /config/chromium-sidekick-oauth/SingletonLock       /config/chromium-sidekick-oauth/SingletonSocket
     /usr/bin/chromium       --no-sandbox       --password-store=basic       --start-maximized       --test-type       --ozone-platform=wayland       ${CHROME_CLI}
     sleep 2

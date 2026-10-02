@@ -57,7 +57,8 @@ services:
       SIDEKICK_CDP_TARGET_PORT: "${SIDEKICK_CDP_TARGET_PORT:-9222}"
     volumes:
       - oauth-browser-data:/config
-      - ./deploy/oauth-browser:/custom-cont-init.d:ro
+      - ./deploy/oauth-browser/90-sidekick-chromium:/custom-cont-init.d/90-sidekick-chromium:ro
+      - ./deploy/oauth-browser/cdp-relay.py:/opt/sidekick/cdp-relay.py:ro
     shm_size: 1gb
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9222/json/version"]
