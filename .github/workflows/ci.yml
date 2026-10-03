@@ -41,7 +41,10 @@ jobs:
           bash -n scripts/configure-browser.sh
           bash -n scripts/configure-browser-test.sh
           bash -n scripts/test-browser-provider.sh
+          bash -n scripts/mcpproxy-netns-guard.sh
+          bash -n scripts/test-mcpproxy-netns-guard.sh
           bash scripts/configure-browser-test.sh
+          bash scripts/test-mcpproxy-netns-guard.sh
           unexpected="$(find deploy/oauth-browser -maxdepth 1 -type f -perm /111 ! -name '90-sidekick-chromium' -print)"
           test -z "$unexpected"
       - name: Build Sidekick for browser smoke

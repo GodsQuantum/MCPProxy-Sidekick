@@ -123,3 +123,18 @@ Application rollback restores the previous immutable Sidekick image and Compose 
     ./scripts/test-browser-provider.sh brave
 
 CI additionally runs CodeQL, govulncheck, gitleaks, container build, Trivy HIGH/CRITICAL scanning, and a contract test against the latest stable MCPProxy release.
+
+## Shared network namespace resilience
+
+When Sidekick and the Human Auth Browser use `network_mode: container:<mcpproxy>`, a runtime restart of the MCPProxy container creates a new network namespace. Existing sidecars can remain attached to the old namespace even though their Docker status is still `healthy`.
+
+Sidekick ships `scripts/mcpproxy-netns-guard.sh` and an optional systemd unit template at `deploy/systemd/mcpproxy-netns-guard.service`.
+
+The guard:
+- compares the network namespace inode of MCPProxy and the configured sidecars;
+- does nothing when namespaces already match;
+- restarts only stale sidecars;
+- listens for future Docker `start` events for MCPProxy;
+- does not require the Docker socket inside Sidekick itself.
+
+Install the helper on a Docker host only when shared-container networking is used. Override `MCPPROXY_SIDECARS` in the systemd unit for local container names.
