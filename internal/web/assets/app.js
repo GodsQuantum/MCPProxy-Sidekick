@@ -34,7 +34,11 @@ async function api(path,opt={}){
   const r=await fetch(BASE+path,opt);
   const text=await r.text();
   let data={}; try{data=text?JSON.parse(text):{}}catch{}
-  if(!r.ok) throw new Error(data.error||("HTTP "+r.status));
+  if(!r.ok){
+    const err=new Error(data.error||("HTTP "+r.status));
+    err.status=r.status;
+    throw err;
+  }
   return data;
 }
 
@@ -180,9 +184,10 @@ async function load({allowEventStart=true}={}){
     if((d.warnings||[]).length) toast(d.warnings.join(" · "));
     if(allowEventStart)startLiveUpdates();
   }catch(e){
-    if(/401|authentication/i.test(e.message)){
+    if(e?.status===401||/401|authentication|session expired/i.test(e.message)){
       stopLiveUpdates();
       $("#app").hidden=true; $("#login").hidden=false;
+      setLoginState("idle","Enter your MCPProxy admin key.");
     } else toast(e.message);
     $("#refresh-state").textContent="Offline";
   }

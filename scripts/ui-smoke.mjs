@@ -30,6 +30,16 @@ ws.onmessage=event=>{
   if(msg.error) p.reject(new Error(JSON.stringify(msg.error))); else p.resolve(msg.result);
 };
 await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject});
+await call("Network.enable");
+const staleCookie=await call("Network.setCookie",{
+  name:"sidekick_session",
+  value:"stale-smoke-session",
+  url:baseURL,
+  secure:true,
+  httpOnly:true,
+  sameSite:"Strict",
+});
+if(staleCookie.success===false) throw new Error("failed to install stale session regression cookie");
 
 const evaluate=async expression=>{
   const r=await call("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true});

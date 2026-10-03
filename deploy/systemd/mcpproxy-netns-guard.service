@@ -1,0 +1,18 @@
+[Unit]
+Description=MCPProxy shared-network-namespace sidecar guard
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment=MCPPROXY_CONTAINER_NAME=mcpproxy
+Environment="MCPPROXY_SIDECARS=mcpproxy-sidekick-oauth-browser mcpproxy-sidekick"
+Environment=MCPPROXY_NETNS_SETTLE_SECONDS=2
+ExecStart=/usr/local/sbin/mcpproxy-netns-guard
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
