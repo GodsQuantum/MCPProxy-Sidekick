@@ -116,7 +116,7 @@ Application rollback restores the previous immutable Sidekick image and Compose 
     go test -race ./...
     go vet ./...
     node --check internal/web/assets/app.js
-    ./scripts/privacy-scan.sh .
+    bash scripts/privacy-scan.sh .
     python3 scripts/test_render_browser_policy.py
     ./scripts/configure-browser-test.sh
     ./scripts/test-browser-provider.sh chromium
