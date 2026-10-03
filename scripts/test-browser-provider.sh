@@ -26,6 +26,16 @@ esac
 
 NAME="sidekick-provider-${PROVIDER}-$$"
 CFG="$(mktemp -d)"
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+if [[ "$HOST_UID" == "0" ]]; then
+  TEST_PUID=1000
+  TEST_PGID=1000
+else
+  TEST_PUID="$HOST_UID"
+  TEST_PGID="$HOST_GID"
+fi
+
 cleanup() {
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   rm -rf "$CFG"
@@ -35,7 +45,7 @@ trap cleanup EXIT
 start_browser() {
   docker run -d --name "$NAME" \
     --shm-size=768m \
-    -e PUID=1000 -e PGID=1000 -e TZ=UTC \
+    -e PUID="$TEST_PUID" -e PGID="$TEST_PGID" -e TZ=UTC \
     -e SIDEKICK_BROWSER_PROVIDER="$PROVIDER" \
     -e SIDEKICK_BROWSER_PROFILE_DIR="$PROFILE" \
     -e SIDEKICK_BITWARDEN_MODE=managed-extension \
