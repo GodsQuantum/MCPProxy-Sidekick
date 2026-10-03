@@ -24,7 +24,7 @@ initial_sidecar="$(inode "$sidecar")"
 
 docker restart "$target" >/dev/null
 restarted_target="$(inode "$target")"
-sidecar_after_target_restart="$(inode "$sidecar")"
+sidecar_after_target_restart="$(inode "$sidecar" 2>/dev/null || true)"
 
 if [[ "$restarted_target" != "$sidecar_after_target_restart" ]]; then
   MCPPROXY_CONTAINER_NAME="$target" \
