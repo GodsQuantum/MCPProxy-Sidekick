@@ -1,38 +1,105 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-target="sidekick-netns-guard-target-$$"
-sidecar="sidekick-netns-guard-sidecar-$$"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GUARD="$ROOT/scripts/mcpproxy-netns-guard.sh"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+mkdir -p "$TMP/bin" "$TMP/state"
 
-cleanup() { docker rm -f "$sidecar" "$target" >/dev/null 2>&1 || true; }
-trap cleanup EXIT
-cleanup
+cat >"$TMP/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+state="${FAKE_NETNS_STATE:?}"
+printf '%s\n' "$*" >>"${FAKE_DOCKER_LOG:?}"
 
-docker run -d --name "$target" alpine:latest sleep 120 >/dev/null
-docker run -d --name "$sidecar" --network "container:$target" alpine:latest sleep 120 >/dev/null
-
-inode() {
-  local pid
-  pid="$(docker inspect -f '{{.State.Pid}}' "$1")"
-  readlink "/proc/$pid/ns/net"
-}
-
-initial_target="$(inode "$target")"
-initial_sidecar="$(inode "$sidecar")"
-[[ "$initial_target" == "$initial_sidecar" ]]
-
-docker restart "$target" >/dev/null
-restarted_target="$(inode "$target")"
-sidecar_after_target_restart="$(inode "$sidecar" 2>/dev/null || true)"
-
-if [[ "$restarted_target" != "$sidecar_after_target_restart" ]]; then
-  MCPPROXY_CONTAINER_NAME="$target" \
-  MCPPROXY_SIDECARS="$sidecar" \
-  MCPPROXY_NETNS_SETTLE_SECONDS=0 \
-    bash "$root/scripts/mcpproxy-netns-guard.sh" --once
+if [[ "$1" == "inspect" && "${2:-}" == "-f" ]]; then
+  name="${4:-}"
+  case "$name" in
+    target) printf '101\n'; exit 0 ;;
+    sidecar)
+      if [[ -f "$state/stopped" && ! -f "$state/rebound" ]]; then
+        printf '0\n'
+      else
+        printf '202\n'
+      fi
+      exit 0
+      ;;
+  esac
 fi
 
-rebound_sidecar="$(inode "$sidecar")"
-[[ "$restarted_target" == "$rebound_sidecar" ]]
-printf 'netns guard OK\n'
+if [[ "$1" == "inspect" ]]; then
+  case "${2:-}" in
+    target|sidecar) exit 0 ;;
+  esac
+fi
+
+if [[ "$1" == "restart" && "${2:-}" == "sidecar" ]]; then
+  touch "$state/rebound"
+  rm -f "$state/stopped"
+  printf 'sidecar\n'
+  exit 0
+fi
+
+echo "unexpected fake docker call: $*" >&2
+exit 2
+EOF
+chmod +x "$TMP/bin/docker"
+
+cat >"$TMP/bin/readlink" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+state="${FAKE_NETNS_STATE:?}"
+case "$1" in
+  /proc/101/ns/net)
+    printf 'net:[target]\n'
+    ;;
+  /proc/202/ns/net)
+    if [[ -f "$state/rebound" || -f "$state/already" ]]; then
+      printf 'net:[target]\n'
+    else
+      printf 'net:[old]\n'
+    fi
+    ;;
+  *)
+    echo "unexpected fake readlink path: $1" >&2
+    exit 2
+    ;;
+esac
+EOF
+chmod +x "$TMP/bin/readlink"
+
+export PATH="$TMP/bin:$PATH"
+export FAKE_NETNS_STATE="$TMP/state"
+export FAKE_DOCKER_LOG="$TMP/docker.log"
+export MCPPROXY_CONTAINER_NAME=target
+export MCPPROXY_SIDECARS=sidecar
+export MCPPROXY_NETNS_SETTLE_SECONDS=0
+
+run_case() {
+  local mode="$1" expected_restarts="$2"
+  rm -f "$TMP/state/"* "$TMP/docker.log"
+  : >"$TMP/docker.log"
+  case "$mode" in
+    already) touch "$TMP/state/already" ;;
+    stale) ;;
+    stopped) touch "$TMP/state/stopped" ;;
+    *) echo "unknown case $mode" >&2; exit 2 ;;
+  esac
+
+  bash "$GUARD" --once
+
+  local restarts
+  restarts="$(grep -c '^restart sidecar$' "$TMP/docker.log" || true)"
+  if [[ "$restarts" != "$expected_restarts" ]]; then
+    echo "$mode: expected $expected_restarts restart(s), got $restarts" >&2
+    cat "$TMP/docker.log" >&2
+    exit 1
+  fi
+}
+
+run_case already 0
+run_case stale 1
+run_case stopped 1
+
+printf 'netns guard unit tests: PASS\n'
