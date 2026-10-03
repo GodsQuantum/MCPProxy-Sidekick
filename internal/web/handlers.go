@@ -1,8 +1,10 @@
 package web
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -12,7 +14,11 @@ import (
 	paperlessadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/paperless"
 	postizadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/postiz"
 	youtubeoauthadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/youtubeoauth"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/capabilities"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/connections"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/oauthconfig"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/storage"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
 )
@@ -101,11 +107,148 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		tools += srv.ToolCount
 		safe = append(safe, safeUpstream{Name: srv.Name, Enabled: srv.Enabled, Status: st, Protocol: srv.Protocol, ToolCount: srv.ToolCount, Authenticated: authenticated, Quarantined: srv.Quarantined, OAuth: oauthEnabled, CredentialConfigured: configured, CredentialPreview: preview, Profiles: pm[srv.Name]})
 	}
+	mcpCaps := capabilities.Detect(r.Context(), s.Proxy)
 	writeJSON(w, 200, map[string]any{
 		"summary":   map[string]int{"total": len(safe), "connected": connected, "tools": tools, "auth_required": authNeeded, "quarantined": quarantined},
 		"upstreams": safe, "profiles": ps, "tokens": toks, "warnings": warnings, "csrf": r.Header.Get("X-Sidekick-CSRF-Expected"),
 		"capabilities": map[string]bool{"omniroute_restore_master": strings.TrimSpace(s.Cfg.OmniRouteDB) != ""},
+		"mcpproxy":     mcpCaps,
+		"settings":     s.safeSettings(),
 	})
+}
+
+func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
+	servers, err := s.Proxy.ListServers(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	profiles, err := s.Proxy.ListProfiles(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	out := make([]connections.Detail, 0, len(servers))
+	for _, server := range servers {
+		meta, ok, err := s.Store.CredentialMeta(server.Name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		out = append(out, connections.Build(server, profiles, meta, ok))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"connections": out})
+}
+
+func (s *Server) handleConnectionDetail(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	server, err := s.Proxy.GetServer(r.Context(), name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	profiles, err := s.Proxy.ListProfiles(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	meta, ok, err := s.Store.CredentialMeta(server.Name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, connections.Build(server, profiles, meta, ok))
+}
+
+func (s *Server) handleConnectionPatch(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing server name")
+		return
+	}
+	var req struct {
+		URL      string `json:"url"`
+		Protocol string `json:"protocol"`
+		Enabled  *bool  `json:"enabled"`
+		Action   string `json:"action"`
+	}
+	if decodeJSON(w, r, &req) != nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(req.Action)) {
+	case "":
+		if req.URL == "" && req.Protocol == "" && req.Enabled == nil {
+			writeError(w, http.StatusBadRequest, "no connection changes requested")
+			return
+		}
+		if err := s.Proxy.PatchServer(r.Context(), name, mcpproxy.ServerPatch{
+			URL: req.URL, Protocol: req.Protocol, Enabled: req.Enabled,
+		}); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	case "enable":
+		if err := s.Proxy.EnableServer(r.Context(), name); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	case "disable":
+		if err := s.Proxy.DisableServer(r.Context(), name); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	case "restart":
+		if err := s.Proxy.RestartServer(r.Context(), name); err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	default:
+		writeError(w, http.StatusBadRequest, "unsupported connection action")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleOAuthScopesGet(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	scopes, err := (oauthconfig.Service{Backend: s.Proxy}).Current(r.Context(), name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"scopes": scopes})
+}
+
+func (s *Server) handleOAuthScopesPreview(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	var req struct {
+		Scopes []string `json:"scopes"`
+	}
+	if decodeJSON(w, r, &req) != nil {
+		return
+	}
+	diff, err := (oauthconfig.Service{Backend: s.Proxy}).Preview(r.Context(), name, req.Scopes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, diff)
+}
+
+func (s *Server) handleOAuthScopesApply(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	var req struct {
+		Scopes []string `json:"scopes"`
+	}
+	if decodeJSON(w, r, &req) != nil {
+		return
+	}
+	result, err := (oauthconfig.Service{Backend: s.Proxy}).Apply(r.Context(), name, req.Scopes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
@@ -183,6 +326,69 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, result)
+}
+
+func (s *Server) profileV3Available(ctx context.Context) bool {
+	return capabilities.Detect(ctx, s.Proxy).ProfileV3
+}
+
+func (s *Server) handleProfileAdvanced(w http.ResponseWriter, r *http.Request) {
+	if !s.profileV3Available(r.Context()) {
+		writeError(w, http.StatusNotFound, "Profiles v3 is not supported by connected MCPProxy")
+		return
+	}
+	name := strings.TrimSpace(r.PathValue("id"))
+	profile, err := s.Proxy.GetProfileV3(r.Context(), name)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, profile)
+}
+
+func (s *Server) handleProfileAdvancedUpdate(w http.ResponseWriter, r *http.Request) {
+	if !s.profileV3Available(r.Context()) {
+		writeError(w, http.StatusNotFound, "Profiles v3 is not supported by connected MCPProxy")
+		return
+	}
+	name := strings.TrimSpace(r.PathValue("id"))
+	var profile mcpproxy.ProfileV3
+	if decodeJSON(w, r, &profile) != nil {
+		return
+	}
+	if profile.Name == "" {
+		profile.Name = name
+	}
+	if profile.Name != name {
+		writeError(w, http.StatusBadRequest, "profile name must match path")
+		return
+	}
+	if err := s.Proxy.UpdateProfileV3(r.Context(), name, profile); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleProfileTry(w http.ResponseWriter, r *http.Request) {
+	if !s.profileV3Available(r.Context()) {
+		writeError(w, http.StatusNotFound, "Profiles v3 is not supported by connected MCPProxy")
+		return
+	}
+	var req struct {
+		Profile mcpproxy.ProfileV3 `json:"profile"`
+		Query   string             `json:"query"`
+		Limit   int                `json:"limit,omitempty"`
+	}
+	if decodeJSON(w, r, &req) != nil {
+		return
+	}
+	result, err := s.Proxy.TryProfileV3(r.Context(), req.Profile, req.Query, req.Limit)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
@@ -268,6 +474,91 @@ func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handleAgentOnboard(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name               string   `json:"name"`
+		Profile            string   `json:"profile"`
+		Permissions        []string `json:"permissions"`
+		ExpiresIn          string   `json:"expires_in"`
+		Target             string   `json:"target"`
+		ConfirmDestructive bool     `json:"confirm_destructive"`
+	}
+	if decodeJSON(w, r, &req) != nil {
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Profile = strings.TrimSpace(req.Profile)
+	req.Target = strings.ToLower(strings.TrimSpace(req.Target))
+	if req.Target == "" {
+		req.Target = "generic"
+	}
+	switch req.Target {
+	case "generic", "n8n", "dify", "claude", "codex":
+	default:
+		writeError(w, http.StatusBadRequest, "unsupported agent target")
+		return
+	}
+	if req.Profile == "" {
+		writeError(w, http.StatusBadRequest, "profile is required")
+		return
+	}
+	profiles, err := s.Proxy.ListProfiles(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	found := false
+	for _, p := range profiles {
+		if p.Name == req.Profile {
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeError(w, http.StatusBadRequest, "profile does not exist")
+		return
+	}
+	created, err := s.Tokens.Create(r.Context(), tokens.CreateRequest{
+		Name: req.Name, AllowedServers: []string{"*"}, Permissions: req.Permissions,
+		ExpiresIn: req.ExpiresIn, ProfilePin: req.Profile, ConfirmDestructive: req.ConfirmDestructive,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	endpoint := s.agentProfileEndpoint(req.Profile)
+	bearer := "Bearer " + created.Token
+	snippets := map[string]string{
+		"generic": "URL: " + endpoint + "\nAuthorization: " + bearer,
+		"n8n":     "MCP URL: " + endpoint + "\nAuthorization header: " + bearer,
+		"dify":    "MCP server URL: " + endpoint + "\nAuthorization: " + bearer,
+		"claude":  "URL: " + endpoint + "\nAuthorization: " + bearer,
+		"codex":   "URL: " + endpoint + "\nAuthorization: " + bearer,
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"name": created.Name, "token": created.Token, "profile": req.Profile,
+		"endpoint": endpoint, "selected_target": req.Target, "snippet": snippets[req.Target],
+		"expires_at": created.ExpiresAt,
+	})
+}
+
+func (s *Server) agentProfileEndpoint(profile string) string {
+	path := "/mcp/p/" + url.PathEscape(profile)
+	raw := strings.TrimSpace(s.Cfg.PublicBaseURL)
+	if raw == "" {
+		return path
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return path
+	}
+	u.Path = path
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
+}
+
 func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name               string   `json:"name"`
@@ -311,6 +602,23 @@ func (s *Server) handleTokenDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+func (s *Server) safeSettings() map[string]any {
+	provider := strings.TrimSpace(s.Cfg.BrowserProvider)
+	if provider == "" {
+		provider = "chromium"
+	}
+	bitwarden := strings.TrimSpace(s.Cfg.BitwardenMode)
+	if bitwarden == "" {
+		bitwarden = "off"
+	}
+	return map[string]any{
+		"browser_provider":              provider,
+		"bitwarden_mode":                bitwarden,
+		"bitwarden_base_url_configured": strings.TrimSpace(s.Cfg.BitwardenBaseURL) != "",
+		"browser_switch_host_side":      true,
+	}
+}
+
 func (s *Server) handleDemoState(w http.ResponseWriter) {
 	writeJSON(w, 200, map[string]any{
 		"summary": map[string]int{"total": 8, "connected": 7, "tools": 284, "auth_required": 1, "quarantined": 0},
@@ -333,5 +641,6 @@ func (s *Server) handleDemoState(w http.ResponseWriter) {
 			{"name": "owner-agent", "token_prefix": "mcp_agt_demo", "allowed_servers": []string{"*"}, "permissions": []string{"read", "write"}, "profile_pin": ""},
 			{"name": "family-agent", "token_prefix": "mcp_agt_fami", "allowed_servers": []string{"paperless-family", "immich-family"}, "permissions": []string{"read", "write"}, "profile_pin": "family"},
 		},
+		"settings": s.safeSettings(),
 	})
 }

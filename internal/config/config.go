@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/browser"
 )
 
 type Config struct {
@@ -23,6 +25,9 @@ type Config struct {
 	SessionLifetime        time.Duration
 	OAuthCDPURL            string
 	OAuthBrowserURL        string
+	BrowserProvider        string
+	BitwardenMode          string
+	BitwardenBaseURL       string
 	PostizBaseURL          string
 	PaperlessEndpoint      string
 	ImmichKeyDir           string
@@ -47,12 +52,23 @@ func Load() (Config, error) {
 		SessionLifetime:        lifetime,
 		OAuthCDPURL:            envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
 		OAuthBrowserURL:        strings.TrimSpace(os.Getenv("SIDEKICK_OAUTH_BROWSER_URL")),
+		BrowserProvider:        strings.ToLower(envOr("SIDEKICK_BROWSER_PROVIDER", "chromium")),
+		BitwardenMode:          strings.ToLower(envOr("SIDEKICK_BITWARDEN_MODE", "off")),
+		BitwardenBaseURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_BITWARDEN_BASE_URL")), "/"),
 		PostizBaseURL:          strings.TrimSpace(os.Getenv("SIDEKICK_POSTIZ_BASE_URL")),
 		PaperlessEndpoint:      strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
 		ImmichKeyDir:           strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
 		OmniRouteDB:            strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
 		YouTubeOAuthControlURL: strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL")), "/"),
 		DemoMode:               parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
+	}
+	if _, err := browser.Resolve(cfg.BrowserProvider); err != nil {
+		return Config{}, errors.New("invalid SIDEKICK_BROWSER_PROVIDER")
+	}
+	switch cfg.BitwardenMode {
+	case "off", "assist", "managed-extension":
+	default:
+		return Config{}, errors.New("invalid SIDEKICK_BITWARDEN_MODE")
 	}
 	mountPath := strings.TrimSpace(os.Getenv("SIDEKICK_MOUNT_PATH"))
 	if mountPath == "" && cfg.PublicBaseURL != "" {
