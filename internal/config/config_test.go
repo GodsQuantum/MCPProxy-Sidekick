@@ -98,3 +98,58 @@ func TestOAuthBrowserDefaultsUnderMountPath(t *testing.T) {
 		t.Fatalf("OAuthBrowserURL=%q", cfg.OAuthBrowserURL)
 	}
 }
+
+func TestLoadBrowserProviderAndBitwardenDefaults(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_BROWSER_PROVIDER", "")
+	t.Setenv("SIDEKICK_BITWARDEN_MODE", "")
+	t.Setenv("SIDEKICK_BITWARDEN_BASE_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BrowserProvider != "chromium" {
+		t.Fatalf("BrowserProvider=%q", cfg.BrowserProvider)
+	}
+	if cfg.BitwardenMode != "off" {
+		t.Fatalf("BitwardenMode=%q", cfg.BitwardenMode)
+	}
+	if cfg.BitwardenBaseURL != "" {
+		t.Fatalf("BitwardenBaseURL=%q", cfg.BitwardenBaseURL)
+	}
+}
+
+func TestLoadRejectsUnknownBrowserProvider(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_BROWSER_PROVIDER", "firefox")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected unknown browser provider to fail")
+	}
+}
+
+func TestLoadRejectsUnknownBitwardenMode(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_BROWSER_PROVIDER", "brave")
+	t.Setenv("SIDEKICK_BITWARDEN_MODE", "magic")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected unknown Bitwarden mode to fail")
+	}
+}
+
+func TestLoadReadsBraveAndManagedBitwarden(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_BROWSER_PROVIDER", "brave")
+	t.Setenv("SIDEKICK_BITWARDEN_MODE", "managed-extension")
+	t.Setenv("SIDEKICK_BITWARDEN_BASE_URL", "https://vault.example.com")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BrowserProvider != "brave" || cfg.BitwardenMode != "managed-extension" || cfg.BitwardenBaseURL != "https://vault.example.com" {
+		t.Fatalf("browser settings=%#v", cfg)
+	}
+}
