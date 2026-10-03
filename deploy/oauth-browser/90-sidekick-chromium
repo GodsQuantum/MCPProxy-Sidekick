@@ -1,7 +1,33 @@
 #!/bin/bash
 set -euo pipefail
 
-install -d -o abc -g abc   /config/.config/labwc   /config/chromium-sidekick-oauth   /config/.local/bin
+provider="${SIDEKICK_BROWSER_PROVIDER:-chromium}"
+profile_dir="${SIDEKICK_BROWSER_PROFILE_DIR:-chromium-sidekick-oauth}"
+
+case "$provider" in
+  chromium)
+    launcher="/usr/bin/wrapped-chromium"
+    browser_cli="${CHROME_CLI:-}"
+    policy_dir="/etc/chromium/policies/managed"
+    ;;
+  brave)
+    launcher="/usr/bin/wrapped-brave"
+    browser_cli="${BRAVE_CLI:-}"
+    policy_dir="/etc/brave/policies/managed"
+    ;;
+  *)
+    echo "unsupported SIDEKICK_BROWSER_PROVIDER: $provider" >&2
+    exit 2
+    ;;
+esac
+
+install -d -o abc -g abc   /config/.config/labwc   "/config/$profile_dir"   /config/.local/bin
+
+policy_tmp="$(mktemp)"
+/lsiopy/bin/python3 /opt/sidekick/render-browser-policy.py   --mode "${SIDEKICK_BITWARDEN_MODE:-off}"   --base-url "${SIDEKICK_BITWARDEN_BASE_URL:-}"   --template /opt/sidekick/policies/bitwarden.json.tmpl   --output "$policy_tmp"
+install -d -m 0755 "$policy_dir"
+install -m 0644 "$policy_tmp" "$policy_dir/sidekick-bitwarden.json"
+rm -f "$policy_tmp"
 
 cat >/config/.config/labwc/autostart <<'EOF'
 #!/bin/bash
@@ -21,14 +47,14 @@ else
   rm -f /config/.local/bin/sidekick-cdp-relay.py
 fi
 
-cat >>/config/.config/labwc/autostart <<'EOF'
+cat >>/config/.config/labwc/autostart <<EOF
 (
   while true; do
-    # Chromium persists singleton locks in the profile. After a container recreate,
-    # those locks can point at the old container hostname/PID and block startup.
-    # This loop only reaches this point when the previous Chromium process exited.
-    rm -f       /config/chromium-sidekick-oauth/SingletonCookie       /config/chromium-sidekick-oauth/SingletonLock       /config/chromium-sidekick-oauth/SingletonSocket
-    /usr/bin/chromium       --no-sandbox       --password-store=basic       --start-maximized       --test-type       --ozone-platform=wayland       ${CHROME_CLI}
+    rm -f \
+      "/config/$profile_dir/SingletonCookie" \
+      "/config/$profile_dir/SingletonLock" \
+      "/config/$profile_dir/SingletonSocket"
+    "$launcher" $browser_cli
     sleep 2
   done
 ) &
