@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   security-events: write
   packages: write
 
@@ -219,34 +219,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: mode=max
           sbom: true
-
-  fix-executable-modes:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: feat/sidekick-v2-implementation
-      - name: Restore executable modes
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x deploy/oauth-browser/90-sidekick-chromium
-          chmod +x scripts/configure-browser-test.sh
-          chmod +x scripts/configure-browser.sh
-          chmod +x scripts/privacy-scan.sh
-          chmod +x scripts/render-browser-policy.py
-          chmod +x scripts/test-browser-provider.sh
-          git update-index --chmod=+x deploy/oauth-browser/90-sidekick-chromium
-          git update-index --chmod=+x scripts/configure-browser-test.sh
-          git update-index --chmod=+x scripts/configure-browser.sh
-          git update-index --chmod=+x scripts/privacy-scan.sh
-          git update-index --chmod=+x scripts/render-browser-policy.py
-          git update-index --chmod=+x scripts/test-browser-provider.sh
-          if git diff --cached --quiet; then
-            echo "Executable modes already correct"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: restore executable script modes"
-          git push origin HEAD:feat/sidekick-v2-implementation
