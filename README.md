@@ -18,25 +18,27 @@ Keep MCPProxy as the gateway — make the human parts easier to operate and rebu
 
 <p align="center"><img src="docs/assets/dashboard.png" width="100%" alt="MCPProxy Sidekick dashboard with generic demo data"></p>
 
-Sidekick sits next to an existing MCPProxy instance and gives you one browser UI for the parts that otherwise end up scattered across config files, terminals and OAuth callbacks: **credentials, OAuth, profiles, upstream health and Agent Tokens**.
+Sidekick sits next to an existing MCPProxy instance and gives you one browser UI for the parts that otherwise end up scattered across config files, terminals and OAuth callbacks: **Connections, credentials, OAuth scopes, Profiles, agent onboarding and live operational state**.
 
-It does not replace MCPProxy. MCPProxy remains the source of truth for routing, tool discovery, upstream state and scoped access.
+It does not replace MCPProxy. MCPProxy remains the source of truth for routing, tool discovery, upstream state and scoped access. Sidekick V2 supports MCPProxy **v0.69.0+** and capability-gates newer MCPProxy features at runtime.
+
+Operational details, browser switching and rollback are documented in [Sidekick V2 Operations](docs/sidekick-v2-operations.md).
 
 ## ✨ Why Sidekick
 
-- **Dynamic upstream inventory** — add a new MCP server to MCPProxy and it appears automatically.
-- **Credential state you can actually see** — configured secrets show a masked preview such as <code>abcd••••wxyz</code>; full values are never returned by Sidekick.
-- **Generic credential editor** — Bearer, <code>X-API-Key</code> or a custom header for ordinary MCP servers.
+- **Connections-first UI** — upstream health, credentials, OAuth, tools and Profile membership live in one place.
+- **Credential state you can actually see** — configured secrets show only a masked preview; full values are never returned by Sidekick.
+- **Safe OAuth scope editing** — preview the scope diff, validate/apply through MCPProxy, then reconnect only when re-consent is required.
+- **Chromium or Brave Human Auth Browser** — choose at install time or switch later with health-checked automatic rollback.
+- **Bitwarden-ready** — optional official managed extension policy, including a self-hosted HTTPS vault base URL, without storing vault secrets in Sidekick.
+- **Profiles and Agents** — native MCPProxy Profiles, capability-gated newer policy controls, and profile-pinned Agent Tokens through a Give to an agent flow.
+- **Live operational state** — authenticated SSE with payload redaction, reconnect backoff and visibility-aware polling fallback.
 - **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases, per-process Immich keys, and upstream-managed YouTube OAuth.
-- **OAuth that gives you somewhere to click** — a visible browser tab opens immediately. Loopback-bound providers use the protected Cloud browser.
-- **Profiles** — group upstreams by identity, role or project.
-- **MCPProxy Agent Tokens** — scope agents to named upstreams and read / write / destructive permission tiers, including MCPProxy <code>profile_pin</code>.
-- **Rebuildable** — Go binary + Docker Compose + OAuth browser. No laptop-specific tunnel or helper.
-- **Small trust surface** — no Docker socket, no CDN JavaScript, non-root container, read-only root filesystem.
+- **Small trust surface** — no Docker socket, no public CDP, no CDN JavaScript, read-only root filesystem and dropped Linux capabilities.
 
 ## 🚀 Quick start
 
-Sidekick expects an **already-running MCPProxy v0.67+ container**. By default that container is named <code>mcpproxy</code>.
+Sidekick expects an **already-running MCPProxy v0.69.0+ container**. By default that container is named <code>mcpproxy</code>.
 
 ~~~bash
 git clone https://github.com/GodsQuantum/mcpproxy-sidekick.git
@@ -54,7 +56,7 @@ docker compose up -d
 Then route:
 
 - a mount path of your choice (for example <code>/control/</code> or <code>/command/</code>) → Sidekick on port 8081 inside the MCPProxy network namespace;
-- <code>/control/oauth-browser/</code> (or the equivalent path under your chosen Sidekick mount) → Chromium/Selkies on port 3000, protected by Sidekick <code>/auth/check</code>;
+- <code>/control/oauth-browser/</code> (or the equivalent path under your chosen Sidekick mount) → the selected Chromium/Brave Human Auth Browser through Selkies on port 3000, protected by Sidekick <code>/auth/check</code>;
 - everything else → MCPProxy.
 
 The frontend derives its API base from the current mount path, so the Sidekick path is not hard-coded. Set <code>SIDEKICK_PUBLIC_BASE_URL</code> to the same public URL and configure your reverse proxy to strip that prefix before forwarding to Sidekick.
@@ -65,11 +67,11 @@ A reference Caddy configuration is included in [Caddyfile.example](Caddyfile.exa
 
 ## 🧩 What the UI manages
 
-### Upstreams
+### Connections
 
-Sidekick reads the live MCPProxy inventory instead of keeping a second server list.
+Sidekick reads the live MCPProxy inventory instead of keeping a second server list, then normalizes each upstream into a Connection.
 
-For every upstream it shows enabled state, health/auth state, tool count, transport, quarantine state, profile membership, OAuth/API-key auth and masked credential state.
+For every Connection it shows enabled/readiness state, tool count, transport, quarantine state, Profile membership, OAuth/API-key auth and masked credential state. Opening a Connection provides credential actions, OAuth reconnect/scopes, diagnostics and supported MCPProxy actions without exposing raw secrets.
 
 ### Credentials
 
@@ -93,7 +95,7 @@ your browser
     └── /control/oauth-browser/
            │
            ▼
-     protected Chromium
+  protected Human Auth Browser
      in MCPProxy network namespace
            │
            └── provider login → loopback callback → MCPProxy
@@ -125,7 +127,7 @@ Family member
   Immich
 ~~~
 
-Profiles are **native MCPProxy v0.67+ profiles**. Sidekick reads them from `GET /api/v1/profiles` and applies membership changes through MCPProxy's configuration API; it does not keep a second profile catalog in SQLite. Native routes are `/mcp/p/<name>`.
+Profiles are **native MCPProxy v0.69.0+ profiles**. Sidekick reads them from `GET /api/v1/profiles` and applies membership changes through MCPProxy's configuration API; it does not keep a second profile catalog in SQLite. Native routes are `/mcp/p/<name>`.
 
 **Upgrade note from Sidekick ≤ v0.1.8:** legacy SQLite profile tables are no longer a runtime source of truth. They are left untouched rather than silently deleted. Recreate any legacy-only profile in MCPProxy before removing an old Sidekick database.
 
@@ -164,8 +166,8 @@ existing MCPProxy container network namespace
 │
 ├── :8080  MCPProxy
 ├── :8081  MCPProxy Sidekick
-├── :3000  OAuth browser UI
-└── :9222  Chromium CDP, loopback only
+├── :3000  Human Auth Browser UI (Chromium or Brave)
+└── :9222  Browser CDP, loopback only
 ~~~
 
 The base public Compose starts only Sidekick and the OAuth browser. Your MCP servers remain separate; Sidekick controls them through MCPProxy rather than owning their lifecycle.
@@ -194,8 +196,13 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_MOUNT_PATH | /control | Reverse-proxy mount path. Change this to /command or another prefix if desired. |
 | SIDEKICK_ALLOWED_HOSTS | mcp.example.com | Trusted browser Host/Origin values. |
 | SIDEKICK_SESSION_LIFETIME | 720h | Admin session lifetime. |
-| SIDEKICK_OAUTH_CDP_URL | http://127.0.0.1:9222 | Chromium DevTools endpoint. With a separate browser network namespace and the relay enabled, use `http://oauth-browser:9223`. |
-| SIDEKICK_CDP_RELAY_ENABLE | false | Opt-in DevTools relay for bridge-network deployments where Chromium remains loopback-bound. |
+| SIDEKICK_OAUTH_CDP_URL | http://127.0.0.1:9222 | Human Auth Browser DevTools endpoint. With a separate browser network namespace and the relay enabled, use `http://oauth-browser:9223`. |
+| SIDEKICK_BROWSER_PROVIDER | chromium | Human Auth Browser provider: `chromium` or `brave`. |
+| SIDEKICK_BROWSER_IMAGE | lscr.io/linuxserver/chromium:latest | Browser container image. The guarded switch script updates this with the provider. |
+| SIDEKICK_BROWSER_PROFILE_DIR | chromium-sidekick-oauth | Persistent browser profile directory below `/config`. |
+| SIDEKICK_BITWARDEN_MODE | off | `off`, `assist`, or `managed-extension`. |
+| SIDEKICK_BITWARDEN_BASE_URL | empty | Optional HTTPS base URL for self-hosted Bitwarden/Vaultwarden. No vault credential is stored here. |
+| SIDEKICK_CDP_RELAY_ENABLE | false | Opt-in DevTools relay for bridge-network deployments where the browser remains loopback-bound. |
 | SIDEKICK_POSTIZ_BASE_URL | empty | Optional Postiz MCP base URL for URL-key auth. |
 | SIDEKICK_PAPERLESS_ENDPOINT | empty | Optional shared Paperless MCP endpoint. |
 | SIDEKICK_OMNIROUTE_DB | empty | Optional read-only OmniRoute SQLite path used to restore the active Master key. |

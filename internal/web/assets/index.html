@@ -11,18 +11,20 @@
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
+
   <div id="login" class="login-shell" hidden>
-    <section class="login-card">
+    <section class="login-card" aria-labelledby="login-title">
       <div class="brand-mark" aria-hidden="true"><span></span><i></i></div>
       <div>
         <p class="eyebrow">MCPPROXY SIDEKICK</p>
-        <h1>Control your MCP stack.</h1>
+        <h1 id="login-title">Control your MCP stack.</h1>
         <p class="muted">Use the same MCPProxy admin API key. Sidekick never stores it in browser storage.</p>
       </div>
-      <form id="login-form">
+      <form id="login-form" aria-busy="false">
         <label for="admin-key">MCPProxy admin key</label>
-        <input id="admin-key" name="key" type="password" autocomplete="current-password" required>
-        <button class="primary" type="submit">Unlock Sidekick</button>
+        <input id="admin-key" name="key" type="password" autocomplete="current-password" required aria-describedby="login-status">
+        <button class="primary login-submit" type="submit"><span class="button-spinner" aria-hidden="true"></span><span class="button-label">Unlock Sidekick</span></button>
+        <p id="login-status" class="login-status muted" role="status" aria-live="polite">Enter your MCPProxy admin key.</p>
       </form>
     </section>
   </div>
@@ -35,13 +37,11 @@
       </div>
       <nav id="nav" aria-label="Primary">
         <button class="nav-item active" data-view="overview">Overview</button>
+        <button class="nav-item" data-view="connections">Connections</button>
         <button class="nav-item" data-view="profiles">Profiles</button>
-        <button class="nav-item" data-view="upstreams">Upstreams</button>
-        <button class="nav-item" data-view="credentials">Credentials</button>
-        <button class="nav-item" data-view="oauth">OAuth</button>
-        <button class="nav-item" data-view="tokens">Agent Tokens</button>
-        <button class="nav-item" data-view="security">Security</button>
-        <button class="nav-item" data-view="setup">Setup / Restore</button>
+        <button class="nav-item" data-view="agents">Agents</button>
+        <button class="nav-item" data-view="activity">Activity &amp; Security</button>
+        <button class="nav-item" data-view="settings">Settings</button>
       </nav>
       <div class="sidebar-footer">
         <span id="refresh-state" class="live-dot">Live</span>
@@ -60,71 +60,65 @@
         </div>
       </header>
 
-      <section id="view-overview" class="view active">
+      <section id="view-overview" class="view active" aria-labelledby="view-title">
         <div id="summary" class="stats-grid"></div>
-        <div class="section-head"><div><h2>Profiles</h2><p>See the MCP identities your agents can actually use.</p></div></div>
+        <div class="section-head"><div><h2>Profiles</h2><p>The identities and roles your agents can actually use.</p></div></div>
         <div id="overview-profiles" class="profile-grid"></div>
-        <div class="section-head"><div><h2>Needs attention</h2><p>Authentication, disabled or unhealthy upstreams.</p></div></div>
+        <div class="section-head"><div><h2>Needs attention</h2><p>Authentication, disabled, quarantined or unhealthy connections.</p></div></div>
         <div id="attention" class="stack"></div>
       </section>
 
-      <section id="view-profiles" class="view">
+      <section id="view-connections" class="view" aria-labelledby="view-title">
         <div class="section-head">
-          <div><h2>Profiles</h2><p>Group upstreams by identity or role. Profiles are metadata; Agent Tokens enforce access.</p></div>
+          <div><h2>Connections</h2><p>Auth, credentials, tools and agent access in one place.</p></div>
+          <input id="connection-search" class="search" type="search" placeholder="Filter connections…" aria-label="Filter connections">
+        </div>
+        <div id="connections-list" class="server-grid"></div>
+      </section>
+
+      <section id="view-profiles" class="view" aria-labelledby="view-title">
+        <div class="section-head">
+          <div><h2>Profiles</h2><p>Group connections by identity or role. MCPProxy enforces profile-pinned access.</p></div>
           <button id="new-profile" class="primary">New profile</button>
         </div>
         <div id="profiles-list" class="profile-grid"></div>
       </section>
 
-      <section id="view-upstreams" class="view">
+      <section id="view-agents" class="view" aria-labelledby="view-title">
         <div class="section-head">
-          <div><h2>Upstreams</h2><p>Live inventory from MCPProxy. New servers appear automatically.</p></div>
-          <input id="upstream-search" class="search" type="search" placeholder="Filter upstreams…">
-        </div>
-        <div id="upstreams-list" class="server-grid"></div>
-      </section>
-
-      <section id="view-credentials" class="view">
-        <div class="section-head"><div><h2>Credentials</h2><p>Replace API keys without exposing the stored secret back to the browser.</p></div></div>
-        <div id="credentials-list" class="server-grid"></div>
-      </section>
-
-      <section id="view-oauth" class="view">
-        <div class="section-head"><div><h2>OAuth</h2><p>One click opens a visible sign-in tab. Loopback-only providers use the protected Cloud browser.</p></div></div>
-        <div id="oauth-list" class="server-grid"></div>
-      </section>
-
-      <section id="view-tokens" class="view">
-        <div class="section-head">
-          <div><h2>Agent Tokens</h2><p>Give agents only the upstreams and permission tiers they need.</p></div>
-          <button id="new-token" class="primary">New token</button>
+          <div><h2>Agents</h2><p>Profile-pinned credentials and MCP access for your AI agents.</p></div>
+          <button id="new-token" class="primary">Give to an agent</button>
         </div>
         <div id="tokens-list" class="stack"></div>
       </section>
 
-      <section id="view-security" class="view">
-        <div class="security-grid">
-          <article class="panel"><h3>Secret handling</h3><p>Full credentials are never returned by Sidekick after submission. The UI stores only masked previews and SHA-256 fingerprints.</p></article>
-          <article class="panel"><h3>Agent isolation</h3><p>MCPProxy Agent Tokens scope upstream visibility and read/write/destructive permission tiers. Profile pinning is server-enforced.</p></article>
-          <article class="panel"><h3>Browser security</h3><p>State-changing calls require CSRF + trusted Origin. Sessions use HttpOnly, Secure, SameSite cookies.</p></article>
-          <article class="panel"><h3>Container posture</h3><p>No Docker socket. Non-root. Read-only root filesystem. Dropped capabilities. OAuth browser is reachable only through the authenticated gateway.</p></article>
+      <section id="view-activity" class="view" aria-labelledby="view-title">
+        <div class="section-head"><div><h2>Activity &amp; Security</h2><p>Operational attention, trust boundaries and authentication health.</p></div></div>
+        <div id="activity-list" class="stack"></div>
+        <div class="security-grid activity-security">
+          <article class="panel"><h3>Secret handling</h3><p>Full credentials are never returned by Sidekick after submission. Only safe masked metadata is rendered.</p></article>
+          <article class="panel"><h3>Agent isolation</h3><p>Profile-pinned Agent Tokens scope visibility and permissions server-side in MCPProxy.</p></article>
+          <article class="panel"><h3>Human Auth Browser</h3><p>OAuth and passkeys stay in the protected human browser. Agents never receive generic CDP or vault access.</p></article>
+          <article class="panel"><h3>Container posture</h3><p>No Docker socket. Read-only root filesystem. Dropped capabilities. Private CDP only.</p></article>
         </div>
       </section>
 
-      <section id="view-setup" class="view">
-        <article class="panel setup-copy">
-          <h2>Restore the control plane</h2>
-          <p>Sidekick is intentionally stateless about secrets. Restore the containers, reconnect credentials, and MCPProxy remains the source of truth.</p>
-          <pre><code>cp .env.example .env
-docker compose up -d
-open https://mcp.example.com/control/</code></pre>
-          <p class="muted">Public examples use documentation-only values. Never commit your production overrides or secrets.</p>
-        </article>
+      <section id="view-settings" class="view" aria-labelledby="view-title">
+        <div class="section-head"><div><h2>Settings</h2><p>Human authentication browser, MCPProxy compatibility and restore information.</p></div></div>
+        <div class="settings-grid">
+          <article id="browser-provider-card" class="panel"></article>
+          <article class="panel">
+            <h3>Setup / Restore</h3>
+            <p>Sidekick keeps MCPProxy authoritative. Recreate Sidekick, reconnect human authentication when required, and the MCP inventory remains intact.</p>
+            <pre><code>cp .env.example .env
+docker compose up -d</code></pre>
+          </article>
+        </div>
       </section>
     </main>
   </div>
 
-  <dialog id="modal">
+  <dialog id="modal" aria-labelledby="modal-title">
     <div class="modal-card">
       <button class="modal-close" type="button" aria-label="Close">×</button>
       <div id="modal-body"></div>
