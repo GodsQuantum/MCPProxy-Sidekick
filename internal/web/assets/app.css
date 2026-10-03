@@ -77,6 +77,13 @@ summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:700}
 .login-card{width:min(460px,100%);background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:30px;box-shadow:var(--shadow);display:grid;gap:22px}
 .login-card h1{margin:4px 0 8px;font-size:34px;letter-spacing:-.04em}
 .login-card form{display:grid;gap:12px}
+.login-status{min-height:1.4em;margin:0;font-size:12px}
+.login-status.good{color:var(--good)}.login-status.bad{color:var(--bad)}
+.login-submit{display:flex;align-items:center;justify-content:center;gap:8px;text-align:center}
+.login-submit:disabled{cursor:wait;opacity:.82}
+.button-spinner{display:none;width:14px;height:14px;border:2px solid color-mix(in srgb,#081019 28%,transparent);border-top-color:#081019;border-radius:50%}
+#login-form[aria-busy="true"] .button-spinner{display:inline-block;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 dialog{width:min(560px,calc(100vw - 28px));border:1px solid var(--line);border-radius:22px;background:var(--surface);color:var(--text);box-shadow:0 30px 90px rgba(0,0,0,.5);padding:0}
 dialog::backdrop{background:rgba(2,6,12,.72);backdrop-filter:blur(5px)}
 .modal-card{padding:24px;position:relative}.modal-close{position:absolute;right:14px;top:12px;border:0;background:transparent;color:var(--muted);font-size:26px}
@@ -95,3 +102,23 @@ dialog::backdrop{background:rgba(2,6,12,.72);backdrop-filter:blur(5px)}
 }
 @media(max-width:420px){.stats-grid{grid-template-columns:1fr 1fr}.stat{padding:14px}.stat strong{font-size:23px}.login-card{padding:22px}}
 @media(prefers-reduced-motion:no-preference){.view.active{animation:fade .16s ease-out}@keyframes fade{from{opacity:.4;transform:translateY(3px)}to{opacity:1;transform:none}}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.activity-security{margin-top:18px}
+.connection-hero{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 18px}
+.connection-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+.connection-section h3{margin:0 0 12px}
+.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.detail-grid div{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px}
+.detail-grid dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:800}
+.detail-grid dd{margin:5px 0 0;overflow-wrap:anywhere}
+textarea{width:100%;resize:vertical;min-height:108px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px 12px;font:inherit}
+textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 65%,transparent);outline-offset:2px}
+.check-row{display:flex;align-items:center;gap:9px;font-weight:650}
+.check-row input{width:auto}
+.scope-status{min-height:1.4em;margin:8px 0 0;font-size:12px}
+.warn-text{color:var(--warn)}.good-text{color:var(--good)}.bad-text{color:var(--bad)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.panel pre{overflow:auto;background:#080b10;color:#d7e5f7;border:1px solid var(--line);border-radius:13px;padding:14px}
+@media(max-width:860px){.settings-grid,.detail-grid{grid-template-columns:1fr}}
