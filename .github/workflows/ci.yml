@@ -35,8 +35,16 @@ jobs:
           node --check scripts/ui-smoke.mjs
           node --check scripts/fake-mcpproxy.mjs
           bash -n deploy/oauth-browser/90-sidekick-chromium
-          python3 -m py_compile deploy/oauth-browser/cdp-relay.py
+          python3 -m py_compile deploy/oauth-browser/cdp-relay.py scripts/render-browser-policy.py scripts/test_render_browser_policy.py
           python3 deploy/oauth-browser/test_cdp_relay.py
+          python3 scripts/test_render_browser_policy.py
+          bash -n scripts/configure-browser.sh
+          bash -n scripts/configure-browser-test.sh
+          bash -n scripts/test-browser-provider.sh
+          bash -n scripts/mcpproxy-netns-guard.sh
+          bash -n scripts/test-mcpproxy-netns-guard.sh
+          bash scripts/configure-browser-test.sh
+          bash scripts/test-mcpproxy-netns-guard.sh
           unexpected="$(find deploy/oauth-browser -maxdepth 1 -type f -perm /111 ! -name '90-sidekick-chromium' -print)"
           test -z "$unexpected"
       - name: Build Sidekick for browser smoke
@@ -57,7 +65,7 @@ jobs:
             SIDEKICK_OAUTH_CDP_URL=http://127.0.0.1:65534 \
             SIDEKICK_OAUTH_BROWSER_URL=/oauth-browser/ \
             /tmp/mcpproxy-sidekick >/tmp/sidekick-ui.log 2>&1 &
-          for i in {1..40}; do curl -fsS http://127.0.0.1:18081/healthz >/dev/null && break; sleep .25; done
+          for _ in {1..40}; do curl -fsS http://127.0.0.1:18081/healthz >/dev/null && break; sleep .25; done
           "$CHROME_PATH" --headless=new --no-sandbox --disable-gpu --remote-debugging-port=9222 --user-data-dir=/tmp/sidekick-chrome about:blank >/tmp/chrome.log 2>&1 &
           node scripts/ui-smoke.mjs http://127.0.0.1:18081/ 9222 admin-key
       - name: Validate visual assets
@@ -78,7 +86,7 @@ jobs:
           print("visual assets OK", w, h)
           PY
       - name: Privacy scan
-        run: ./scripts/privacy-scan.sh
+        run: bash scripts/privacy-scan.sh
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -87,13 +95,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  browser-providers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [chromium, brave]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test Human Auth Browser provider
+        run: |
+          chmod +x scripts/test-browser-provider.sh
+          ./scripts/test-browser-provider.sh "${{ matrix.provider }}"
+
   mcpproxy-latest-contract:
     runs-on: ubuntu-latest
     steps:
       - name: Resolve latest stable MCPProxy
         id: latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="$(curl -fsSL https://api.github.com/repos/smart-mcp-proxy/mcpproxy-go/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+          tag="$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/smart-mcp-proxy/mcpproxy-go/releases/latest \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
           test -n "$tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Testing MCPProxy $tag"
@@ -111,7 +140,7 @@ jobs:
             -e MCPPROXY_LISTEN=0.0.0.0:8080 \
             -e MCPPROXY_API_KEY="$MCPPROXY_TEST_KEY" \
             "ghcr.io/smart-mcp-proxy/mcpproxy-server:$MCPPROXY_TAG"
-          for i in {1..30}; do
+          for _ in {1..30}; do
             if curl -fsS http://127.0.0.1:19080/healthz >/dev/null; then
               break
             fi
@@ -121,11 +150,23 @@ jobs:
             docker logs mcpproxy-contract-test
             exit 1
           fi
-          for endpoint in servers profiles tokens; do
+          for endpoint in info servers profiles tokens; do
             code="$(curl -sS -o "$response" -w '%{http_code}' \
               -H "X-API-Key: $MCPPROXY_TEST_KEY" \
               "http://127.0.0.1:19080/api/v1/$endpoint")"
-            test "$code" = "200"
+            if [[ "$code" != "200" ]]; then
+              cat "$response"
+              exit 1
+            fi
+          done
+          for endpoint in clients attention access/explain; do
+            code="$(curl -sS -o "$response" -w '%{http_code}' \
+              -H "X-API-Key: $MCPPROXY_TEST_KEY" \
+              "http://127.0.0.1:19080/api/v1/$endpoint")"
+            case "$code" in
+              200|404|405) ;;
+              *) cat "$response"; exit 1 ;;
+            esac
           done
 
   codeql:
@@ -162,7 +203,7 @@ jobs:
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    needs: [test, codeql, container]
+    needs: [test, browser-providers, mcpproxy-latest-contract, codeql, container]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4

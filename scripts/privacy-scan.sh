@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${1:-.}"
+ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT"
 
 mapfile -d '' files < <(git ls-files -z --cached --others --exclude-standard)
@@ -16,7 +16,7 @@ done
 fail=0
 check() {
   local label="$1" pattern="$2" out
-  out="$(grep -nE --binary-files=without-match -- "$pattern" "${scan_files[@]}" 2>/dev/null || true)"
+  out="$(grep -niE --binary-files=without-match -- "$pattern" "${scan_files[@]}" 2>/dev/null || true)"
   if [[ -n "$out" ]]; then
     printf "\n[privacy] %s\n%s\n" "$label" "$out" >&2
     fail=1
@@ -38,6 +38,7 @@ if [[ -n "$emails" ]]; then
 fi
 
 check "credential-like values" "(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|mcp_agt_[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})"
+check "Bitwarden secret material" "(SIDEKICK_BITWARDEN_(MASTER_PASSWORD|PASSWORD|TOKEN|SESSION|RECOVERY_KEY)=|\"(master_password|access_token|refresh_token)\"[[:space:]]*:)"
 
 if (( fail )); then
   echo "[privacy] FAILED" >&2

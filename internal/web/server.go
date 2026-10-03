@@ -57,13 +57,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/logout", s.requireSession(s.handleLogout))
 	mux.HandleFunc("GET /auth/check", s.handleAuthCheck)
 	mux.HandleFunc("GET /api/state", s.requireSession(s.handleState))
+	mux.HandleFunc("GET /api/events", s.requireSession(s.handleEvents))
+	mux.HandleFunc("GET /api/connections", s.requireSession(s.handleConnections))
+	mux.HandleFunc("GET /api/connections/{name}", s.requireSession(s.handleConnectionDetail))
+	mux.HandleFunc("PATCH /api/connections/{name}", s.requireSession(s.requireMutation(s.handleConnectionPatch)))
+	mux.HandleFunc("GET /api/connections/{name}/oauth-scopes", s.requireSession(s.handleOAuthScopesGet))
+	mux.HandleFunc("POST /api/connections/{name}/oauth-scopes/preview", s.requireSession(s.requireMutation(s.handleOAuthScopesPreview)))
+	mux.HandleFunc("POST /api/connections/{name}/oauth-scopes/apply", s.requireSession(s.requireMutation(s.handleOAuthScopesApply)))
 	mux.HandleFunc("POST /api/upstreams/{name}/credential", s.requireSession(s.requireMutation(s.handleCredential)))
 	mux.HandleFunc("POST /api/upstreams/{name}/oauth/start", s.requireSession(s.requireMutation(s.handleOAuthStart)))
 	mux.HandleFunc("POST /api/adapters/omniroute/restore-master", s.requireSession(s.requireMutation(s.handleOmniRouteRestoreMaster)))
 	mux.HandleFunc("POST /api/profiles", s.requireSession(s.requireMutation(s.handleProfile)))
+	mux.HandleFunc("POST /api/profiles/try", s.requireSession(s.requireMutation(s.handleProfileTry)))
+	mux.HandleFunc("GET /api/profiles/{id}/advanced", s.requireSession(s.handleProfileAdvanced))
+	mux.HandleFunc("PUT /api/profiles/{id}/advanced", s.requireSession(s.requireMutation(s.handleProfileAdvancedUpdate)))
 	mux.HandleFunc("DELETE /api/profiles/{id}", s.requireSession(s.requireMutation(s.handleProfileDelete)))
 	mux.HandleFunc("POST /api/profiles/{id}/servers", s.requireSession(s.requireMutation(s.handleProfileServer)))
 	mux.HandleFunc("DELETE /api/profiles/{id}/servers/{server}", s.requireSession(s.requireMutation(s.handleProfileServerDelete)))
+	mux.HandleFunc("POST /api/agents/onboard", s.requireSession(s.requireMutation(s.handleAgentOnboard)))
 	mux.HandleFunc("POST /api/tokens", s.requireSession(s.requireMutation(s.handleTokenCreate)))
 	mux.HandleFunc("POST /api/tokens/{name}/regenerate", s.requireSession(s.requireMutation(s.handleTokenRegenerate)))
 	mux.HandleFunc("DELETE /api/tokens/{name}", s.requireSession(s.requireMutation(s.handleTokenRevoke)))
@@ -101,8 +112,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 401, "invalid credentials")
 		return
 	}
+	info, err := s.Proxy.Info(r.Context())
+	if err != nil {
+		s.Auth.Delete(sess.ID)
+		writeError(w, http.StatusBadGateway, "MCPProxy connection failed: "+err.Error())
+		return
+	}
 	http.SetCookie(w, &http.Cookie{Name: "sidekick_session", Value: sess.ID, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: int(time.Until(sess.ExpiresAt).Seconds())})
-	writeJSON(w, 200, map[string]any{"ok": true, "csrf": sess.CSRFToken})
+	writeJSON(w, 200, map[string]any{"ok": true, "csrf": sess.CSRFToken, "mcpproxy_version": info.Version})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
