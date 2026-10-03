@@ -52,8 +52,41 @@ await waitFor(
   "Sidekick page/login did not load",
 );
 await waitFor("!document.querySelector('#login').hidden","login did not appear");
-await evaluate("document.querySelector('#admin-key').value="+JSON.stringify(adminKey)+";document.querySelector('#login-form').requestSubmit();true");
+assert(await evaluate("!!document.querySelector('#login-status')"),"login status live region missing");
+const wrongBusy=await evaluate("(()=>{const i=document.querySelector('#admin-key');i.value='wrong-key';document.querySelector('#login-form').requestSubmit();return document.querySelector('#login-form').getAttribute('aria-busy')==='true'&&document.querySelector('#login-form button[type=submit]').disabled})()");
+assert(wrongBusy,"login did not enter checking state for invalid key");
+await waitFor("document.querySelector('#login-status')?.textContent.includes('Connection failed')","login error status missing");
+assert(await evaluate("document.querySelector('#admin-key').value==='wrong-key' && !document.querySelector('#login-form button[type=submit]').disabled"),"failed login must preserve key and unlock submit");
+const goodBusy=await evaluate("(()=>{const i=document.querySelector('#admin-key');i.value="+JSON.stringify(adminKey)+";document.querySelector('#login-form').requestSubmit();return document.querySelector('#login-form').getAttribute('aria-busy')==='true'&&document.querySelector('#login-form button[type=submit]').disabled})()");
+assert(goodBusy,"login did not enter checking state");
+await waitFor("document.querySelector('#login-status')?.textContent.includes('Connected to MCPProxy')","login success status missing");
 await waitFor("!document.querySelector('#app').hidden && document.querySelector('#profiles-list')?.innerText.includes('/mcp/p/personal')","unlock/state load failed");
+await waitFor("document.querySelector('#refresh-state')?.dataset.mode==='sse' && Number(document.querySelector('#refresh-state')?.dataset.fallbacks||0)>=1","SSE fallback/reconnect cycle was not observed");
+assert(await evaluate("!document.body.innerText.includes('SUPER_SECRET_SSE_SMOKE')"),"raw MCPProxy SSE payload leaked into the UI");
+await evaluate("document.querySelector('.nav-item[data-view=\"activity\"]').click();true");
+await waitFor("document.querySelector('#activity-list')?.innerText.includes('servers.changed')","normalized SSE activity did not render");
+const navText=await evaluate("Array.from(document.querySelectorAll('#nav .nav-item')).map(x=>x.textContent.trim()).join('|')");
+assert(navText==="Overview|Connections|Profiles|Agents|Activity & Security|Settings","unexpected V2 navigation: "+navText);
+await evaluate("document.querySelector('.nav-item[data-view=\"connections\"]').click();true");
+await waitFor("document.querySelector('#connections-list .connection-card')?.innerText.includes('github')","Connections view did not render");
+assert(await evaluate("!!document.querySelector('.connection-open[data-name=\"google-oauth\"]')"),"connection detail action missing");
+await evaluate("document.querySelector('.connection-open[data-name=\"google-oauth\"]').click();true");
+await waitFor("document.querySelector('#modal[open] details summary')?.textContent.includes('Advanced')","connection Advanced disclosure missing");
+await evaluate("document.querySelector('.modal-close').click();true");
+await waitFor("!document.querySelector('#modal').open","connection dialog did not close");
+assert(await evaluate("document.activeElement?.classList.contains('connection-open') && document.activeElement?.dataset.name==='google-oauth'"),"dialog focus did not return to connection opener");
+await evaluate("document.querySelector('.nav-item[data-view=\"settings\"]').click();true");
+await waitFor("document.querySelector('#browser-provider-card')?.innerText.includes('Chromium')","browser provider Settings card missing");
+assert(await evaluate("document.querySelector('#browser-provider-card')?.innerText.includes('Bitwarden: off')"),"Bitwarden mode missing");
+await evaluate("document.querySelector('.nav-item[data-view=\"profiles\"]').click();true");
+await waitFor("!!document.querySelector('.profile-advanced[data-profile=\"personal\"]')","Profile v3 policy action missing when capability is present");
+await evaluate("document.querySelector('.profile-advanced[data-profile=\"personal\"]').click();true");
+await waitFor("!!document.querySelector('#profile-advanced-form')","Profile v3 editor did not open");
+assert(await evaluate("!!document.querySelector('#profile-max-tier') && !!document.querySelector('#profile-unannotated') && !!document.querySelector('#profile-classify')"),"Profile v3 policy controls missing");
+await evaluate("document.querySelector('#profile-try-query').value='issue';document.querySelector('#profile-try-btn').click();true");
+await waitFor("document.querySelector('#profile-try-result')?.textContent.includes('Hidden by profile: 1')","Profile v3 Try policy result missing");
+await evaluate("document.querySelector('.modal-close').click();true");
+await waitFor("!document.querySelector('#modal').open","Profile policy dialog did not close");
 
 assert(await evaluate("document.querySelector('#modal > .modal-card')?.tagName==='DIV'"),"modal-card must not be a FORM");
 await evaluate("window.confirm=()=>true;document.querySelector('#new-profile').click();true");
@@ -69,8 +102,13 @@ await waitFor("Array.from(document.querySelectorAll('.profile-card')).some(x=>x.
 await evaluate("document.querySelector('.remove-profile-server[data-profile=\"browser-test\"][data-server=\"filesystem\"]').click();true");
 await waitFor("!document.querySelector('.remove-profile-server[data-profile=\"browser-test\"][data-server=\"filesystem\"]')","upstream removal not rendered");
 
-await evaluate("document.querySelector('#new-token').click();true");
-assert(await evaluate("!!document.querySelector('#token-form')"),"token form missing");
+await evaluate("document.querySelector('.nav-item[data-view=\"agents\"]').click();document.querySelector('#new-token').click();true");
+assert(await evaluate("!!document.querySelector('#token-form')"),"agent onboarding form missing");
+assert(await evaluate("!!document.querySelector('#token-profile[required]') && !Array.from(document.querySelectorAll('#token-profile option')).some(x=>x.value==='')"),"agent onboarding must require a profile");
+assert(await evaluate("!!document.querySelector('#agent-target option[value=\"n8n\"]')"),"agent target selector missing n8n");
+await evaluate("document.querySelector('#token-name').value='smoke-agent';document.querySelector('#token-profile').value='personal';document.querySelector('#agent-target').value='n8n';document.querySelector('#token-form').requestSubmit();true");
+await waitFor("document.querySelector('#one-token')?.value==='mcp_agt_smoke_once'","one-time agent token missing");
+assert(await evaluate("document.querySelector('#one-time-snippet')?.value.includes('/mcp/p/personal') && document.querySelector('#one-time-snippet')?.value.includes('Authorization')"),"n8n onboarding snippet missing");
 await evaluate("document.querySelector('.modal-close').click();openCredential('github');true");
 assert(await evaluate("!!document.querySelector('#credential-form')"),"credential form missing");
 await evaluate("document.querySelector('.modal-close').click();true");
