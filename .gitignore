@@ -12,3 +12,5 @@ config.local.*
 compose.override.yaml
 screenshots/live/
 .worktrees/
+
+.superpowers/
