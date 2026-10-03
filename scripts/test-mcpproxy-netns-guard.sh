@@ -24,13 +24,14 @@ initial_sidecar="$(inode "$sidecar")"
 
 docker restart "$target" >/dev/null
 restarted_target="$(inode "$target")"
-stale_sidecar="$(inode "$sidecar")"
-[[ "$restarted_target" != "$stale_sidecar" ]]
+sidecar_after_target_restart="$(inode "$sidecar")"
 
-MCPPROXY_CONTAINER_NAME="$target" \
-MCPPROXY_SIDECARS="$sidecar" \
-MCPPROXY_NETNS_SETTLE_SECONDS=0 \
-  bash "$root/scripts/mcpproxy-netns-guard.sh" --once
+if [[ "$restarted_target" != "$sidecar_after_target_restart" ]]; then
+  MCPPROXY_CONTAINER_NAME="$target" \
+  MCPPROXY_SIDECARS="$sidecar" \
+  MCPPROXY_NETNS_SETTLE_SECONDS=0 \
+    bash "$root/scripts/mcpproxy-netns-guard.sh" --once
+fi
 
 rebound_sidecar="$(inode "$sidecar")"
 [[ "$restarted_target" == "$rebound_sidecar" ]]
