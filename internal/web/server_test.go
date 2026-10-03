@@ -27,6 +27,8 @@ func TestStateNeverReturnsFullUpstreamSecret(t *testing.T) {
 
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/api/v1/info":
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": map[string]any{"version": "v0.69.0"}})
 		case "/api/v1/servers":
 			_ = json.NewEncoder(w).Encode([]mcpproxy.Server{{
 				Name: "github", Enabled: true, Status: "ready", ToolCount: 94,
@@ -139,6 +141,8 @@ func TestStateDegradesInsteadOfReturning502(t *testing.T) {
 			}
 			fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
+				case "/api/v1/info":
+					_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": map[string]any{"version": "v0.69.0"}})
 				case "/api/v1/servers":
 					if tc.failServers {
 						http.Error(w, "boom", http.StatusBadGateway)
@@ -209,6 +213,8 @@ func TestNativeProfileCRUDAndPinnedTokenGuard(t *testing.T) {
 	tokensState := []mcpproxy.AgentToken{}
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/info":
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": map[string]any{"version": "v0.69.0"}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/profiles":
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": map[string]any{"profiles": profiles}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/servers":
