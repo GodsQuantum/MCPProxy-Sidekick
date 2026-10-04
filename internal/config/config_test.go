@@ -157,16 +157,16 @@ func TestLoadReadsBraveAndManagedBitwarden(t *testing.T) {
 func TestLoadBrowserInstances(t *testing.T) {
 	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
 	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
-	t.Setenv("SIDEKICK_BROWSER_INSTANCE", "playwright-developer")
-	t.Setenv("SIDEKICK_BROWSER_INSTANCES_JSON", `[{"id":"playwright-developer","label":"developer","cdp_url":"http://developer:9222","browser_url":"/control/developer/"},{"id":"playwright-profile-owner","label":"profile-owner","cdp_url":"http://profile-owner:9222","browser_url":"/control/profile-owner/"}]`)
+	t.Setenv("SIDEKICK_BROWSER_INSTANCE", "playwright-primary")
+	t.Setenv("SIDEKICK_BROWSER_INSTANCES_JSON", `[{"id":"playwright-primary","label":"Primary","cdp_url":"http://primary:9222","browser_url":"/control/primary/"},{"id":"playwright-secondary","label":"Secondary","cdp_url":"http://secondary:9222","browser_url":"/control/secondary/"}]`)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.BrowserInstance != "playwright-developer" || len(cfg.BrowserInstances) != 2 {
+	if cfg.BrowserInstance != "playwright-primary" || len(cfg.BrowserInstances) != 2 {
 		t.Fatalf("browser registry=%#v selected=%q", cfg.BrowserInstances, cfg.BrowserInstance)
 	}
-	if cfg.OAuthCDPURL != "http://developer:9222" || cfg.OAuthBrowserURL != "/control/developer/" {
+	if cfg.OAuthCDPURL != "http://primary:9222" || cfg.OAuthBrowserURL != "/control/primary/" {
 		t.Fatalf("selected browser not applied: %#v", cfg)
 	}
 }
@@ -175,7 +175,7 @@ func TestLoadRejectsUnknownBrowserInstance(t *testing.T) {
 	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
 	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
 	t.Setenv("SIDEKICK_BROWSER_INSTANCE", "missing")
-	t.Setenv("SIDEKICK_BROWSER_INSTANCES_JSON", `[{"id":"playwright-developer","cdp_url":"http://developer:9222","browser_url":"/control/developer/"}]`)
+	t.Setenv("SIDEKICK_BROWSER_INSTANCES_JSON", `[{"id":"playwright-primary","cdp_url":"http://primary:9222","browser_url":"/control/primary/"}]`)
 	if _, err := Load(); err == nil {
 		t.Fatal("expected unknown browser instance to fail")
 	}
