@@ -12,6 +12,13 @@ import (
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/browser"
 )
 
+type BrowserInstance struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	CDPURL     string `json:"cdp_url"`
+	BrowserURL string `json:"browser_url"`
+}
+
 type Config struct {
 	ListenAddr             string
 	MCPProxyBaseURL        string
@@ -26,6 +33,8 @@ type Config struct {
 	OAuthCDPURL            string
 	OAuthBrowserURL        string
 	BrowserProvider        string
+	BrowserInstance        string
+	BrowserInstances       []BrowserInstance
 	BitwardenMode          string
 	BitwardenBaseURL       string
 	PostizBaseURL          string
@@ -82,6 +91,16 @@ func Load() (Config, error) {
 		if cfg.MountPath != "" {
 			cfg.OAuthBrowserURL = cfg.MountPath + "/oauth-browser/"
 		}
+	}
+	instances, selected, err := loadBrowserInstances(cfg)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.BrowserInstances = instances
+	cfg.BrowserInstance = selected
+	if instance, ok := cfg.BrowserInstanceByID(selected); ok {
+		cfg.OAuthCDPURL = instance.CDPURL
+		cfg.OAuthBrowserURL = instance.BrowserURL
 	}
 	if cfg.DemoMode {
 		if cfg.MCPProxyBaseURL == "" {
@@ -141,4 +160,64 @@ func normalizeMountPath(v string) string {
 		v = "/" + v
 	}
 	return strings.TrimRight(v, "/")
+}
+
+func loadBrowserInstances(cfg Config) ([]BrowserInstance, string, error) {
+	selected := strings.TrimSpace(os.Getenv("SIDEKICK_BROWSER_INSTANCE"))
+	raw := strings.TrimSpace(os.Getenv("SIDEKICK_BROWSER_INSTANCES_JSON"))
+	instances := []BrowserInstance{}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &instances); err != nil {
+			return nil, "", errors.New("invalid SIDEKICK_BROWSER_INSTANCES_JSON")
+		}
+	} else {
+		id := selected
+		if id == "" {
+			id = "default"
+		}
+		label := strings.TrimSpace(os.Getenv("SIDEKICK_BROWSER_INSTANCE_LABEL"))
+		if label == "" {
+			label = id
+		}
+		instances = []BrowserInstance{{
+			ID: id, Label: label, CDPURL: cfg.OAuthCDPURL, BrowserURL: cfg.OAuthBrowserURL,
+		}}
+	}
+	if len(instances) == 0 {
+		return nil, "", errors.New("at least one browser instance is required")
+	}
+	seen := map[string]bool{}
+	for i := range instances {
+		instances[i].ID = strings.TrimSpace(instances[i].ID)
+		instances[i].Label = strings.TrimSpace(instances[i].Label)
+		instances[i].CDPURL = strings.TrimRight(strings.TrimSpace(instances[i].CDPURL), "/")
+		instances[i].BrowserURL = strings.TrimSpace(instances[i].BrowserURL)
+		if instances[i].ID == "" || instances[i].CDPURL == "" || instances[i].BrowserURL == "" {
+			return nil, "", errors.New("browser instance requires id, cdp_url and browser_url")
+		}
+		if seen[instances[i].ID] {
+			return nil, "", errors.New("duplicate browser instance id")
+		}
+		seen[instances[i].ID] = true
+		if instances[i].Label == "" {
+			instances[i].Label = instances[i].ID
+		}
+	}
+	if selected == "" {
+		selected = instances[0].ID
+	}
+	if !seen[selected] {
+		return nil, "", errors.New("SIDEKICK_BROWSER_INSTANCE does not match a configured browser instance")
+	}
+	return instances, selected, nil
+}
+
+func (c Config) BrowserInstanceByID(id string) (BrowserInstance, bool) {
+	id = strings.TrimSpace(id)
+	for _, instance := range c.BrowserInstances {
+		if instance.ID == id {
+			return instance, true
+		}
+	}
+	return BrowserInstance{}, false
 }

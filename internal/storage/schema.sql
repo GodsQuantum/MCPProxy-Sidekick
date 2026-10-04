@@ -15,3 +15,9 @@ CREATE TABLE IF NOT EXISTS audit_events (
   success INTEGER NOT NULL,
   detail TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);

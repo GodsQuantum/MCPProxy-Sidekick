@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,9 +16,11 @@ import (
 	postizadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/postiz"
 	youtubeoauthadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/youtubeoauth"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/capabilities"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/config"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/connections"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/credentials"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
+	"github.com/GodsQuantum/mcpproxy-sidekick/internal/oauth"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/oauthconfig"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/storage"
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/tokens"
@@ -313,14 +316,15 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 502, err.Error())
 			return
 		}
-		if err := s.OAuth.Browser.Open(r.Context(), start.AuthURL); err != nil {
+		browser := s.activeBrowser()
+		if err := browser.Open(r.Context(), start.AuthURL); err != nil {
 			writeError(w, 502, err.Error())
 			return
 		}
-		writeJSON(w, 200, map[string]any{"browser_url": s.OAuth.Browser.SessionURL(), "provider": "youtube", "profile": "full"})
+		writeJSON(w, 200, map[string]any{"browser_url": browser.SessionURL(), "provider": "youtube", "profile": "full"})
 		return
 	}
-	result, err := s.OAuth.Start(r.Context(), name)
+	result, err := s.OAuth.StartWithBrowser(r.Context(), name, s.activeBrowser())
 	if err != nil {
 		writeError(w, 502, err.Error())
 		return
@@ -602,6 +606,62 @@ func (s *Server) handleTokenDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+func (s *Server) activeBrowserInstance() config.BrowserInstance {
+	id := s.Cfg.BrowserInstance
+	if s.Store != nil {
+		if stored, ok, err := s.Store.Setting("browser_instance"); err == nil && ok {
+			if _, valid := s.Cfg.BrowserInstanceByID(stored); valid {
+				id = stored
+			}
+		}
+	}
+	if instance, ok := s.Cfg.BrowserInstanceByID(id); ok {
+		return instance
+	}
+	if len(s.Cfg.BrowserInstances) > 0 {
+		return s.Cfg.BrowserInstances[0]
+	}
+	return config.BrowserInstance{ID: "default", Label: "Default", CDPURL: s.Cfg.OAuthCDPURL, BrowserURL: s.Cfg.OAuthBrowserURL}
+}
+
+func (s *Server) activeBrowser() oauth.Browser {
+	instance := s.activeBrowserInstance()
+	return oauth.Browser{CDPBaseURL: instance.CDPURL, PublicSessionURL: instance.BrowserURL}
+}
+
+func (s *Server) handleBrowserOpen(w http.ResponseWriter, r *http.Request) {
+	instance := s.activeBrowserInstance()
+	if strings.TrimSpace(instance.BrowserURL) == "" {
+		writeError(w, http.StatusServiceUnavailable, "browser instance has no visible session URL")
+		return
+	}
+	http.Redirect(w, r, instance.BrowserURL, http.StatusFound)
+}
+
+func (s *Server) handleBrowserInstanceUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.Store == nil {
+		writeError(w, http.StatusServiceUnavailable, "settings store unavailable")
+		return
+	}
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	body.ID = strings.TrimSpace(body.ID)
+	if _, ok := s.Cfg.BrowserInstanceByID(body.ID); !ok {
+		writeError(w, http.StatusBadRequest, "unknown browser instance")
+		return
+	}
+	if err := s.Store.SetSetting("browser_instance", body.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "save browser instance")
+		return
+	}
+	writeJSON(w, http.StatusOK, s.safeSettings())
+}
+
 func (s *Server) safeSettings() map[string]any {
 	provider := strings.TrimSpace(s.Cfg.BrowserProvider)
 	if provider == "" {
@@ -611,8 +671,16 @@ func (s *Server) safeSettings() map[string]any {
 	if bitwarden == "" {
 		bitwarden = "off"
 	}
+	active := s.activeBrowserInstance()
+	instances := make([]map[string]string, 0, len(s.Cfg.BrowserInstances))
+	for _, instance := range s.Cfg.BrowserInstances {
+		instances = append(instances, map[string]string{"id": instance.ID, "label": instance.Label})
+	}
 	return map[string]any{
 		"browser_provider":              provider,
+		"browser_instance":              active.ID,
+		"browser_instances":             instances,
+		"browser_open_supported":        strings.TrimSpace(active.BrowserURL) != "",
 		"bitwarden_mode":                bitwarden,
 		"bitwarden_base_url_configured": strings.TrimSpace(s.Cfg.BitwardenBaseURL) != "",
 		"browser_switch_host_side":      true,
