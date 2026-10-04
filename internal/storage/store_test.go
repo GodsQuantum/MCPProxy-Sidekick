@@ -45,11 +45,11 @@ func TestSettingRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if err := store.SetSetting("browser_instance", "playwright-arezki"); err != nil {
+	if err := store.SetSetting("browser_instance", "playwright-primary"); err != nil {
 		t.Fatal(err)
 	}
 	got, ok, err := store.Setting("browser_instance")
-	if err != nil || !ok || got != "playwright-arezki" {
+	if err != nil || !ok || got != "playwright-primary" {
 		t.Fatalf("got=%q ok=%v err=%v", got, ok, err)
 	}
 }
