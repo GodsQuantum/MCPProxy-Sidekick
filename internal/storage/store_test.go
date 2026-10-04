@@ -38,3 +38,18 @@ func TestCredentialMetaMissing(t *testing.T) {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
 }
+
+func TestSettingRoundTrip(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "sidekick.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.SetSetting("browser_instance", "playwright-arezki"); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := store.Setting("browser_instance")
+	if err != nil || !ok || got != "playwright-arezki" {
+		t.Fatalf("got=%q ok=%v err=%v", got, ok, err)
+	}
+}
