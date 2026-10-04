@@ -324,10 +324,32 @@ function renderSettings(){
   const s=state.data?.settings||{};
   const provider=(s.browser_provider||"chromium").toLowerCase();
   const other=provider==="brave"?"chromium":"brave";
+  const instances=Array.isArray(s.browser_instances)?s.browser_instances:[];
+  const selected=s.browser_instance||instances[0]?.id||"";
+  const options=instances.map(i=>'<option value="'+esc(i.id)+'"'+(i.id===selected?' selected':'')+'>'+esc(i.label||i.id)+'</option>').join("");
+  const picker=instances.length>1
+    ? '<label>Browser instance<select id="browser-instance-select">'+options+'</select></label>'
+    : '<p>Instance: <strong>'+esc(instances[0]?.label||selected||"default")+'</strong></p>';
   root.innerHTML='<div class="row"><div><p class="eyebrow">HUMAN AUTH BROWSER</p><h3>'+esc(titleCase(provider))+'</h3></div><span class="badge good">Configured</span></div>'+
+    picker+
+    '<div class="card-actions"><button type="button" class="primary" id="open-human-browser"'+(s.browser_open_supported?'':' disabled')+'>Open browser</button></div>'+
     '<p>Bitwarden: <strong>'+esc(s.bitwarden_mode||"off")+'</strong>'+(s.bitwarden_base_url_configured?' · custom vault URL configured':'')+'</p>'+
-    '<p class="muted">Browser switching is deliberately host-side so Sidekick never needs the Docker socket. Profiles remain persistent and MCPProxy is untouched.</p>'+
-    '<details><summary>Switch browser safely</summary><pre><code>./scripts/configure-browser.sh '+esc(other)+'</code></pre><p class="muted">The script health-checks GUI + CDP and rolls back automatically on failure.</p></details>';
+    '<p class="muted">Only server-declared browser instances can be selected. CDP endpoints are never exposed to the frontend.</p>'+
+    '<details><summary>Switch browser engine safely</summary><pre><code>./scripts/configure-browser.sh '+esc(other)+'</code></pre><p class="muted">The script health-checks GUI + CDP and rolls back automatically on failure.</p></details>';
+  const open=$("#open-human-browser");
+  if(open)open.onclick=()=>window.open(BASE+"/api/browser/open","sidekick-human-browser");
+  const select=$("#browser-instance-select");
+  if(select)select.onchange=async()=>{
+    const previous=selected;
+    try{
+      await api("/api/settings/browser-instance",{method:"POST",body:JSON.stringify({id:select.value})});
+      toast("Browser instance switched to "+select.options[select.selectedIndex].text);
+      await load();
+    }catch(e){
+      select.value=previous;
+      toast(e.message);
+    }
+  };
 }
 
 async function restoreOmniRouteMaster(){

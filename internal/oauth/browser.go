@@ -126,6 +126,10 @@ type StartResult struct {
 }
 
 func (s Service) Start(ctx context.Context, server string) (StartResult, error) {
+	return s.StartWithBrowser(ctx, server, s.Browser)
+}
+
+func (s Service) StartWithBrowser(ctx context.Context, server string, browser Browser) (StartResult, error) {
 	if err := s.Starter.LogoutOAuth(ctx, server); err != nil {
 		return StartResult{}, fmt.Errorf("reset OAuth session: %w", err)
 	}
@@ -133,10 +137,10 @@ func (s Service) Start(ctx context.Context, server string) (StartResult, error) 
 	if err != nil {
 		return StartResult{}, err
 	}
-	if err := s.Browser.Open(ctx, start.AuthURL); err != nil {
+	if err := browser.Open(ctx, start.AuthURL); err != nil {
 		return StartResult{}, err
 	}
-	browserURL := s.Browser.SessionURL()
+	browserURL := browser.SessionURL()
 	if browserURL == "" {
 		return StartResult{}, errors.New("OAuth browser has no public session URL")
 	}

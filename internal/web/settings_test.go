@@ -15,6 +15,8 @@ func TestDemoStateReturnsSafeBrowserSettings(t *testing.T) {
 		BrowserProvider:  "brave",
 		BitwardenMode:    "managed-extension",
 		BitwardenBaseURL: "https://vault.example.test",
+		BrowserInstance:  "playwright-arezki",
+		BrowserInstances: []config.BrowserInstance{{ID: "playwright-arezki", Label: "Arezki", CDPURL: "http://secret-cdp:9222", BrowserURL: "/control/oauth-browser/"}},
 	}}).Handler()
 	req := httptest.NewRequest(http.MethodGet, "https://mcp.example.com/api/state", nil)
 	rw := httptest.NewRecorder()
@@ -28,12 +30,14 @@ func TestDemoStateReturnsSafeBrowserSettings(t *testing.T) {
 		"\"bitwarden_mode\":\"managed-extension\"",
 		"\"bitwarden_base_url_configured\":true",
 		"\"browser_switch_host_side\":true",
+		"\"browser_instance\":\"playwright-arezki\"",
+		"\"browser_open_supported\":true",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)
 		}
 	}
-	if strings.Contains(body, "vault.example.test") {
-		t.Fatalf("vault URL should not be returned: %s", body)
+	if strings.Contains(body, "vault.example.test") || strings.Contains(body, "secret-cdp") {
+		t.Fatalf("sensitive browser/vault URLs should not be returned: %s", body)
 	}
 }

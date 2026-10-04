@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -55,4 +56,24 @@ func (s *Store) CredentialMeta(server string) (CredentialMeta, bool, error) {
 		return CredentialMeta{}, false, err
 	}
 	return m, true, nil
+}
+
+func (s *Store) Setting(key string) (string, bool, error) {
+	var value string
+	err := s.db.QueryRow("SELECT value FROM settings WHERE key=?", key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return value, true, nil
+}
+
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.db.Exec(
+		"INSERT INTO settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+		key, value, time.Now().UTC().Format(time.RFC3339Nano),
+	)
+	return err
 }
