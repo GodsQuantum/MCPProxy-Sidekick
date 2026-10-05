@@ -17,7 +17,9 @@ Supported providers:
 | Chromium | lscr.io/linuxserver/chromium:latest | CHROME_CLI | /config/chromium-sidekick-oauth |
 | Brave | lscr.io/linuxserver/brave:latest | BRAVE_CLI | /config/brave-sidekick-oauth |
 
-Both providers use Selkies for the visible browser and private CDP on 127.0.0.1:9222.
+Both providers use Selkies for the visible browser and private CDP on loopback.
+
+A deployment may declare multiple persistent browser instances (for example separate Arezki/Fella profiles) and reuse them for both Playwright automation and human OAuth. When those browsers share `network_mode: container:<mcpproxy>`, assign each instance distinct GUI, Selkies control, browser CDP and optional CDP-relay ports. The provider OAuth callback to `127.0.0.1:<dynamic-port>` then reaches MCPProxy naturally because the browser and MCPProxy share the same loopback. Add every shared-netns browser container to `MCPPROXY_SIDECARS` so the namespace guard rebinds it after an MCPProxy restart.
 
 Example Brave settings:
 

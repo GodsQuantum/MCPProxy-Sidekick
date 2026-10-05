@@ -33,7 +33,7 @@ Operational details, browser switching and rollback are documented in [Sidekick 
 - **Bitwarden-ready** — optional official managed extension policy, including a self-hosted HTTPS vault base URL, without storing vault secrets in Sidekick.
 - **Profiles and Agents** — native MCPProxy Profiles, capability-gated newer policy controls, and profile-pinned Agent Tokens through a Give to an agent flow.
 - **Live operational state** — authenticated SSE with payload redaction, reconnect backoff and visibility-aware polling fallback.
-- **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases, per-process Immich keys, and upstream-managed YouTube OAuth.
+- **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases, per-process Immich keys, optional `openalex-github` API-key files that stay disabled after credential writes, and upstream-managed YouTube OAuth.
 - **Small trust surface** — no Docker socket, no public CDP, no CDN JavaScript, read-only root filesystem and dropped Linux capabilities.
 
 ## 🚀 Quick start
@@ -81,7 +81,8 @@ Some MCPs need a different shape. Sidekick includes adapters for:
 
 - **Postiz** — key embedded into its MCP endpoint URL;
 - **Paperless MCP** — several MCPProxy aliases can point to one Paperless bridge with different user tokens;
-- **ImmichMCP** — each identity can write to a distinct API-key file used by its own ImmichMCP process.
+- **ImmichMCP** — each identity can write to a distinct API-key file used by its own ImmichMCP process;
+- **OpenAlex GitHub fallback** — an upstream named `openalex-github` can write its API key atomically to a local `0600` secret file through `SIDEKICK_OPENALEX_KEY_FILE`. Saving/replacing the key deliberately does **not** enable the upstream, so an official OpenAlex connection can remain primary.
 
 Optional adapter endpoints are configured through <code>.env</code>; private values never belong in Git.
 
@@ -206,6 +207,7 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_POSTIZ_BASE_URL | empty | Optional Postiz MCP base URL for URL-key auth. |
 | SIDEKICK_PAPERLESS_ENDPOINT | empty | Optional shared Paperless MCP endpoint. |
 | SIDEKICK_OMNIROUTE_DB | empty | Optional read-only OmniRoute SQLite path used to restore the active Master key. |
+| SIDEKICK_OPENALEX_KEY_FILE | empty | Optional write-only secret path used by an upstream named `openalex-github`. Sidekick stores a submitted OpenAlex API key atomically with mode `0600` and does not auto-enable the upstream. |
 | SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL | empty | Optional internal helper URL for YouTube MCPs whose Google OAuth is managed inside the upstream process. |
 | PUID / PGID | 1000 / 1000 | LinuxServer Chromium profile ownership. |
 | TZ | UTC | OAuth browser timezone. |

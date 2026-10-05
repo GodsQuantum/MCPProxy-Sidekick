@@ -374,12 +374,20 @@ async function startOAuth(name){
 }
 
 function openCredential(name,opener){
-  openModal('<h2 id="modal-title">Credential · '+esc(name)+'</h2><p class="muted">The full secret is submitted once and is not returned by Sidekick afterward.</p><form id="credential-form" class="form-grid"><label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label><label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label><label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label><button class="primary" type="submit">Save / replace & enable</button></form>',opener);
-  $("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
+  const isOpenAlex=name==="openalex-github";
+  const authFields=isOpenAlex
+    ? '<p class="muted">OpenAlex GitHub is an optional local fallback. Paste the OpenAlex API key here; Sidekick stores it in a local 0600 secret file. Saving the key does not enable this connection.</p><label>OpenAlex API key<input id="cred-value" type="password" autocomplete="off" required></label>'
+    : '<p class="muted">The full secret is submitted once and is not returned by Sidekick afterward.</p><label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label><label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label><label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label>';
+  const submitLabel=isOpenAlex?"Save / replace API key (keep disabled)":"Save / replace & enable";
+  openModal('<h2 id="modal-title">Credential · '+esc(name)+'</h2><form id="credential-form" class="form-grid">'+authFields+'<button class="primary" type="submit">'+submitLabel+'</button></form>',opener);
+  if(!isOpenAlex)$("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
   $("#credential-form").onsubmit=async e=>{
     e.preventDefault();
     try{
-      await api("/api/upstreams/"+encodeURIComponent(name)+"/credential",{method:"POST",body:JSON.stringify({mode:$("#cred-mode").value,header_name:$("#cred-header").value,value:$("#cred-value").value})});
+      const payload=isOpenAlex
+        ? {mode:"openalex-api-key",header_name:"",value:$("#cred-value").value}
+        : {mode:$("#cred-mode").value,header_name:$("#cred-header").value,value:$("#cred-value").value};
+      await api("/api/upstreams/"+encodeURIComponent(name)+"/credential",{method:"POST",body:JSON.stringify(payload)});
       closeModal(); toast(name+" credential updated"); await load();
     }catch(err){toast(err.message)}
   };

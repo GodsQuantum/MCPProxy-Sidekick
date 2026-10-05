@@ -12,6 +12,7 @@ import (
 
 	immichadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/immich"
 	omnirouteadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/omniroute"
+	openalexadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/openalex"
 	paperlessadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/paperless"
 	postizadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/postiz"
 	youtubeoauthadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/youtubeoauth"
@@ -270,6 +271,8 @@ func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	switch {
+	case name == "openalex-github" && s.Cfg.OpenAlexKeyFile != "":
+		err = (openalexadapter.Adapter{KeyFile: s.Cfg.OpenAlexKeyFile}).Apply(req.Value)
 	case name == "postiz" && s.Cfg.PostizBaseURL != "":
 		err = postizadapter.Adapter{Editor: s.Proxy, BaseURL: s.Cfg.PostizBaseURL, ServerName: name}.Apply(r.Context(), req.Value)
 	case (name == "paperless" || strings.HasPrefix(name, "paperless-")) && s.Cfg.PaperlessEndpoint != "":

@@ -59,12 +59,13 @@ func TestLoadReadsAdapterSettings(t *testing.T) {
 	t.Setenv("SIDEKICK_PAPERLESS_ENDPOINT", "http://paperless-mcp:3000/mcp")
 	t.Setenv("SIDEKICK_IMMICH_KEY_DIR", "/run/immich-keys")
 	t.Setenv("SIDEKICK_OMNIROUTE_DB", "/run/omniroute/storage.sqlite")
+	t.Setenv("SIDEKICK_OPENALEX_KEY_FILE", "/run/openalex/openalex_api_key")
 	t.Setenv("SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL", "http://127.0.0.1:8767/")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.PostizBaseURL == "" || cfg.PaperlessEndpoint == "" || cfg.ImmichKeyDir == "" || cfg.OmniRouteDB == "" || cfg.YouTubeOAuthControlURL != "http://127.0.0.1:8767" {
+	if cfg.PostizBaseURL == "" || cfg.PaperlessEndpoint == "" || cfg.ImmichKeyDir == "" || cfg.OmniRouteDB == "" || cfg.OpenAlexKeyFile != "/run/openalex/openalex_api_key" || cfg.YouTubeOAuthControlURL != "http://127.0.0.1:8767" {
 		t.Fatalf("adapter settings missing: %#v", cfg)
 	}
 }
