@@ -395,6 +395,9 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.OAuth.StartWithBrowser(r.Context(), name, browser)
 	if err != nil {
+		// Error text contains only the failed stage/status; auth URLs and tokens
+		// are deliberately never logged.
+		log.Printf("sidekick oauth reconnect failed server=%s: %v", name, err)
 		writeError(w, 502, err.Error())
 		return
 	}
