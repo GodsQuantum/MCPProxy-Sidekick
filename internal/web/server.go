@@ -213,7 +213,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 func credentialView(server mcpproxy.Server, meta storage.CredentialMeta, hasMeta bool) (bool, string) {
-	if server.Name == "cryptocom-live" && hasMeta && !strings.Contains(meta.MaskedPreview, " + secret set · valid until ") && !strings.HasPrefix(meta.MaskedPreview, "Crypto.com from Vaultwarden ") {
+	if (server.Name == "cryptocom-app" || server.Name == "cryptocom-exchange") && hasMeta && !strings.HasPrefix(meta.MaskedPreview, "Crypto.com ") {
 		return false, "Crypto.com credentials required"
 	}
 	if hasMeta {

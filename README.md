@@ -212,11 +212,17 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_CREDENTIAL_PENDING_HOST_DIR | empty | Optional host-side transient credential inbox used by secure handoff adapters. |
 | SIDEKICK_CREDENTIAL_SSH_TRANSFER_ROOT | empty | Optional transfer root reachable by the configured SSH MCP. |
 | SIDEKICK_CREDENTIAL_SOURCE_SSH_PROFILE | empty | SSH MCP profile used to stage/remove transient credential files on the Sidekick host. |
-| SIDEKICK_CRYPTOCOM_REMOTE_ENV_PATH | empty | Optional destination environment file for a Crypto.com private gateway. |
-| SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR | empty | Optional remote Compose directory containing the Crypto.com credential consumer. |
-| SIDEKICK_CRYPTOCOM_REMOTE_SERVICE | cdcx-live-mcp | Compose service force-recreated after credential rotation. Override it when the credential belongs to another Crypto.com surface such as the App Agent Key bridge. |
-| SIDEKICK_CRYPTOCOM_REMOTE_USER | empty | Optional remote OS user that owns the Crypto.com environment file. |
+| SIDEKICK_CRYPTOCOM_APP_REMOTE_ENV_PATH | empty | Destination 0600 environment file for the Crypto.com Main App Agent Key bridge. |
+| SIDEKICK_CRYPTOCOM_APP_REMOTE_COMPOSE_DIR | empty | Remote Compose directory for the Crypto.com Main App MCP service. |
+| SIDEKICK_CRYPTOCOM_APP_REMOTE_SERVICE | cryptocom-app | App MCP Compose service force-recreated after App credential rotation. |
+| SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_ENV_PATH | empty | Separate 0600 environment file for Crypto.com Exchange API credentials. |
+| SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_COMPOSE_DIR | empty | Remote Compose directory for the Crypto.com Exchange MCP service. |
+| SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_SERVICE | cryptocom-exchange | Exchange MCP Compose service force-recreated after Exchange credential rotation. |
+| SIDEKICK_CRYPTOCOM_REMOTE_USER | empty | Remote OS user that owns both Crypto.com environment files. |
 | SIDEKICK_CRYPTOCOM_REMOTE_SSH_PROFILE | empty | SSH MCP profile for the remote Crypto.com gateway host. |
+
+> Crypto.com App and Exchange are intentionally separate credential/account surfaces. The App target writes CDC_API_KEY / CDC_API_SECRET; the Exchange target writes CDCX_API_KEY / CDCX_API_SECRET. Never point both services at the same credential file.
+
 | SIDEKICK_DIFY_REMOTE_SSH_PROFILE | empty | SSH MCP profile for the Dify host when server-side Dify credential application is enabled. |
 | SIDEKICK_DIFY_APPLY_HELPER_PATH | empty | Remote helper that writes one-time MCP credentials through Dify's native encrypted provider storage. |
 | SIDEKICK_DIFY_BINDINGS_JSON | empty | Optional JSON mapping of MCPProxy profiles to Dify provider IDs and enforced permission lists. |

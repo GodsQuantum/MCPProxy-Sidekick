@@ -220,24 +220,40 @@ func TestLoadRejectsInvalidDifyBindings(t *testing.T) {
 	}
 }
 
-func TestLoadCryptoComRemoteService(t *testing.T) {
+func TestLoadCryptoComTargets(t *testing.T) {
 	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
 	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_CRYPTOCOM_APP_REMOTE_ENV_PATH", "/app/app.env")
+	t.Setenv("SIDEKICK_CRYPTOCOM_APP_REMOTE_COMPOSE_DIR", "/stacks/app")
+	t.Setenv("SIDEKICK_CRYPTOCOM_APP_REMOTE_SERVICE", "cryptocom-app")
+	t.Setenv("SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_ENV_PATH", "/exchange/live.env")
+	t.Setenv("SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_COMPOSE_DIR", "/stacks/exchange")
+	t.Setenv("SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_SERVICE", "cryptocom-exchange")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.CryptoComRemoteService != "cdcx-live-mcp" {
-		t.Fatalf("default Crypto.com remote service=%q", cfg.CryptoComRemoteService)
+	if cfg.CryptoComAppRemoteService != "cryptocom-app" || cfg.CryptoComExchangeRemoteService != "cryptocom-exchange" {
+		t.Fatalf("crypto services app=%q exchange=%q", cfg.CryptoComAppRemoteService, cfg.CryptoComExchangeRemoteService)
 	}
+	if cfg.CryptoComAppRemoteEnvPath != "/app/app.env" || cfg.CryptoComExchangeRemoteEnvPath != "/exchange/live.env" {
+		t.Fatalf("crypto env paths app=%q exchange=%q", cfg.CryptoComAppRemoteEnvPath, cfg.CryptoComExchangeRemoteEnvPath)
+	}
+}
 
-	t.Setenv("SIDEKICK_CRYPTOCOM_REMOTE_SERVICE", "cryptocom-app-read")
-	cfg, err = Load()
+func TestLoadCryptoComLegacyAppFallback(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_CRYPTOCOM_REMOTE_ENV_PATH", "/legacy/app.env")
+	t.Setenv("SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR", "/legacy/app")
+	t.Setenv("SIDEKICK_CRYPTOCOM_REMOTE_SERVICE", "legacy-app")
+
+	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.CryptoComRemoteService != "cryptocom-app-read" {
-		t.Fatalf("configured Crypto.com remote service=%q", cfg.CryptoComRemoteService)
+	if cfg.CryptoComAppRemoteEnvPath != "/legacy/app.env" || cfg.CryptoComAppRemoteService != "legacy-app" {
+		t.Fatalf("legacy app fallback env=%q service=%q", cfg.CryptoComAppRemoteEnvPath, cfg.CryptoComAppRemoteService)
 	}
 }

@@ -124,13 +124,14 @@ func runCryptoComSetVault() {
 		log.Fatal(err)
 	}
 	adapter := cryptocomadapter.Adapter{
+		Kind:             "app",
 		Proxy:            proxy,
 		PendingDir:       filepath.Join(filepath.Dir(cfg.DBPath), "credential-inbox"),
 		PendingHostDir:   cfg.CredentialPendingHostDir,
 		SSHTransferRoot:  cfg.CredentialSSHTransferRoot,
-		RemoteEnvPath:    cfg.CryptoComRemoteEnvPath,
-		RemoteComposeDir: cfg.CryptoComRemoteComposeDir,
-		RemoteService:    cfg.CryptoComRemoteService,
+		RemoteEnvPath:    cfg.CryptoComAppRemoteEnvPath,
+		RemoteComposeDir: cfg.CryptoComAppRemoteComposeDir,
+		RemoteService:    cfg.CryptoComAppRemoteService,
 		RemoteUser:       cfg.CryptoComRemoteUser,
 		SourceSSHProfile: cfg.CredentialSourceSSHProfile,
 		RemoteSSHProfile: cfg.CryptoComRemoteSSHProfile,

@@ -375,25 +375,29 @@ async function startOAuth(name){
 
 function openCredential(name,opener){
   const isOpenAlex=name==="openalex-github";
-  const isCryptoLive=name==="cryptocom-live";
+  const isCryptoApp=name==="cryptocom-app";
+  const isCryptoExchange=name==="cryptocom-exchange";
+  const isCryptoPrivate=isCryptoApp||isCryptoExchange;
   if(name==="cryptocom-market"||name==="cryptocom-paper"){
     toast(name==="cryptocom-market"?"Crypto.com Market Data is public and needs no private credential.":"Crypto.com Paper is local simulation and needs no Crypto.com credential.");
     return;
   }
   const authFields=isOpenAlex
     ? '<p class="muted">OpenAlex GitHub is an optional local fallback. Paste the OpenAlex API key here; Sidekick stores it in a local 0600 secret file. Saving the key does not enable this connection.</p><label>OpenAlex API key<input id="cred-value" type="password" autocomplete="off" required></label>'
-    : isCryptoLive
-      ? '<p class="muted">Crypto.com Exchange private API requires BOTH the API key and API secret. Sidekick writes the pair to a 0600 transient file, streams it through the existing SSH MCP to the live gateway, restarts only that gateway, then removes the transient files. The secret is never stored in Sidekick metadata.</p><label>Crypto.com API key<input id="cred-value" type="password" autocomplete="off" required></label><label>Crypto.com API secret<input id="cred-secret" type="password" autocomplete="off" required></label><label>Credential lifetime (days)<input id="cred-expiry-days" type="number" min="1" max="365" value="90" required></label>'
+    : isCryptoPrivate
+      ? '<p class="muted">'+(isCryptoApp
+          ? 'Crypto.com App Agent Key: use the key and secret generated in the Crypto.com mobile App. This connection reads the Main App portfolio and supports quote-based crypto trading APIs.'
+          : 'Crypto.com Exchange API: use the key and secret generated on exchange.crypto.com. This connection sees only the dedicated Exchange account/order book, separate from the Main App.')+' Sidekick installs the pair into its own 0600 credential file and restarts only this target service. The secret is never stored in Sidekick metadata.</p><label>Crypto.com '+(isCryptoApp?'App Agent':'Exchange')+' API key<input id="cred-value" type="password" autocomplete="off" required></label><label>Crypto.com API secret<input id="cred-secret" type="password" autocomplete="off" required></label><label>Credential lifetime (days)<input id="cred-expiry-days" type="number" min="1" max="365" value="90" required></label>'
       : '<p class="muted">The full secret is submitted once and is not returned by Sidekick afterward.</p><label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label><label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label><label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label>';
-  const submitLabel=isOpenAlex?"Save / replace API key (keep disabled)":isCryptoLive?"SET credentials":"Save / replace & enable";
+  const submitLabel=isOpenAlex?"Save / replace API key (keep disabled)":isCryptoPrivate?"SET credentials":"Save / replace & enable";
   openModal('<h2 id="modal-title">Credential · '+esc(name)+'</h2><form id="credential-form" class="form-grid">'+authFields+'<button class="primary" type="submit">'+submitLabel+'</button></form>',opener);
-  if(!isOpenAlex&&!isCryptoLive)$("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
+  if(!isOpenAlex&&!isCryptoPrivate)$("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
   $("#credential-form").onsubmit=async e=>{
     e.preventDefault();
     try{
       const payload=isOpenAlex
         ? {mode:"openalex-api-key",header_name:"",value:$("#cred-value").value}
-        : isCryptoLive
+        : isCryptoPrivate
           ? {mode:"cryptocom-api-pair",value:$("#cred-value").value,secret:$("#cred-secret").value,expires_days:Number($("#cred-expiry-days").value||90)}
           : {mode:$("#cred-mode").value,header_name:$("#cred-header").value,value:$("#cred-value").value};
       await api("/api/upstreams/"+encodeURIComponent(name)+"/credential",{method:"POST",body:JSON.stringify(payload)});
