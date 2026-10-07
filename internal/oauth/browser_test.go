@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
 )
 
@@ -127,5 +129,86 @@ func TestServiceStartReturnsVisibleBrowserURL(t *testing.T) {
 	}
 	if opened == "" {
 		t.Fatal("browser was not navigated")
+	}
+}
+
+type startOnlyStarter struct{}
+
+func (startOnlyStarter) StartOAuth(context.Context, string) (mcpproxy.OAuthStart, error) {
+	return mcpproxy.OAuthStart{AuthURL: "https://provider.example/authorize?x=1"}, nil
+}
+
+func TestServiceStartDoesNotRequirePreemptiveLogout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/json/list":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		case "/json/new":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "tab-1"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	s := Service{
+		Starter: startOnlyStarter{},
+		Browser: Browser{CDPBaseURL: srv.URL, PublicSessionURL: "/oauth-browser/"},
+	}
+	if _, err := s.Start(context.Background(), "google"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBrowserOpenFallsBackToCDPWebSocket(t *testing.T) {
+	var srv *httptest.Server
+	var created bool
+	upgrader := websocket.Upgrader{}
+
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/json/list":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		case "/json/new":
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		case "/json/version":
+			wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+			_ = json.NewEncoder(w).Encode(map[string]any{"webSocketDebuggerUrl": wsURL})
+		case "/ws":
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				t.Errorf("upgrade: %v", err)
+				return
+			}
+			defer conn.Close()
+			var req map[string]any
+			if err := conn.ReadJSON(&req); err != nil {
+				t.Errorf("read CDP request: %v", err)
+				return
+			}
+			if req["method"] != "Target.createTarget" {
+				t.Errorf("method = %v", req["method"])
+			}
+			params, _ := req["params"].(map[string]any)
+			if params["url"] != "https://provider.example/authorize?x=1" {
+				t.Errorf("url = %v", params["url"])
+			}
+			created = true
+			_ = conn.WriteJSON(map[string]any{
+				"id":     1,
+				"result": map[string]any{"targetId": "oauth-tab"},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	b := Browser{CDPBaseURL: srv.URL, PublicSessionURL: "/oauth-browser/"}
+	if err := b.Open(context.Background(), "https://provider.example/authorize?x=1"); err != nil {
+		t.Fatal(err)
+	}
+	if !created {
+		t.Fatal("Target.createTarget fallback was not used")
 	}
 }
