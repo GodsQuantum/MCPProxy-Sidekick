@@ -262,3 +262,14 @@ Issues and pull requests are welcome. For auth/security changes, include tests p
 ## 📄 License
 
 [MIT](LICENSE)
+
+## OAuth reconnect resilience
+
+Sidekick reconnects OAuth servers transactionally:
+
+- **Never pre-logout.** Clicking **Reconnect** starts a replacement OAuth flow without deleting the currently stored token first. A temporary network/browser failure therefore cannot turn a recoverable session into a forced logout.
+- **Transient retry.** OAuth-start calls tolerate short local/network recovery delays before surfacing an error.
+- **CloakBrowser-compatible CDP.** Sidekick keeps Chromium's native PUT /json/new fast path and falls back to the browser-level DevTools WebSocket Target.createTarget command when a CDP relay (such as CloakBrowser Manager) does not expose /json/new.
+- **Actionable errors.** Failures are reported by stage (start OAuth session vs open OAuth browser) without logging authorization URLs, tokens or secrets.
+
+For production, keep the upstream MCP server's OAuth/token store on persistent storage. An Internet outage should be handled by reconnect/retry; it should never trigger automatic token deletion.
