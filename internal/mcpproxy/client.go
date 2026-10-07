@@ -61,6 +61,28 @@ func (c *Client) PatchServer(ctx context.Context, name string, patch ServerPatch
 	return c.doJSON(ctx, http.MethodPatch, "/api/v1/servers/"+url.PathEscape(name), patch, nil)
 }
 
+// CallTool executes one MCPProxy built-in tool through the native REST management
+// surface. The upstream arguments remain a native JSON object; callers should
+// never place secrets in args because MCPProxy activity records tool arguments.
+func (c *Client) CallTool(ctx context.Context, toolName string, arguments map[string]interface{}) (json.RawMessage, error) {
+	var response struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+	}
+	longClient := *c.http
+	longClient.Timeout = 2 * time.Minute
+	if err := c.doJSONWithClient(ctx, &longClient, http.MethodPost, "/api/v1/tools/call", map[string]interface{}{
+		"tool_name": toolName,
+		"arguments": arguments,
+	}, &response); err != nil {
+		return nil, err
+	}
+	if !response.Success {
+		return nil, errors.New("mcpproxy tool call did not succeed")
+	}
+	return response.Data, nil
+}
+
 func (c *Client) EnableServer(ctx context.Context, name string) error {
 	return c.doJSON(ctx, http.MethodPost, "/api/v1/servers/"+url.PathEscape(name)+"/enable", map[string]any{}, nil)
 }
@@ -86,6 +108,10 @@ func (c *Client) StartOAuth(ctx context.Context, name string) (OAuthStart, error
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, body any, out any) error {
+	return c.doJSONWithClient(ctx, c.http, method, path, body, out)
+}
+
+func (c *Client) doJSONWithClient(ctx context.Context, httpClient *http.Client, method, path string, body any, out any) error {
 	var reader io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -102,7 +128,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := c.http.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

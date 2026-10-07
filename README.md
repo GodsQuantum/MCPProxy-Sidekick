@@ -33,7 +33,7 @@ Operational details, browser switching and rollback are documented in [Sidekick 
 - **Bitwarden-ready** — optional official managed extension policy, including a self-hosted HTTPS vault base URL, without storing vault secrets in Sidekick.
 - **Profiles and Agents** — native MCPProxy Profiles, capability-gated newer policy controls, and profile-pinned Agent Tokens through a Give to an agent flow.
 - **Live operational state** — authenticated SSE with payload redaction, reconnect backoff and visibility-aware polling fallback.
-- **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases, per-process Immich keys, optional `openalex-github` API-key files that stay disabled after credential writes, and upstream-managed YouTube OAuth.
+- **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases, per-process Immich keys, optional `openalex-github` API-key files that stay disabled after credential writes, upstream-managed YouTube OAuth, and opt-in secure credential handoff for deployment-defined Crypto.com/Dify integrations.
 - **Small trust surface** — no Docker socket, no public CDP, no CDN JavaScript, read-only root filesystem and dropped Linux capabilities.
 
 ## 🚀 Quick start
@@ -209,6 +209,16 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_OMNIROUTE_DB | empty | Optional read-only OmniRoute SQLite path used to restore the active Master key. |
 | SIDEKICK_OPENALEX_KEY_FILE | empty | Optional write-only secret path used by an upstream named `openalex-github`. Sidekick stores a submitted OpenAlex API key atomically with mode `0600` and does not auto-enable the upstream. |
 | SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL | empty | Optional internal helper URL for YouTube MCPs whose Google OAuth is managed inside the upstream process. |
+| SIDEKICK_CREDENTIAL_PENDING_HOST_DIR | empty | Optional host-side transient credential inbox used by secure handoff adapters. |
+| SIDEKICK_CREDENTIAL_SSH_TRANSFER_ROOT | empty | Optional transfer root reachable by the configured SSH MCP. |
+| SIDEKICK_CREDENTIAL_SOURCE_SSH_PROFILE | empty | SSH MCP profile used to stage/remove transient credential files on the Sidekick host. |
+| SIDEKICK_CRYPTOCOM_REMOTE_ENV_PATH | empty | Optional destination environment file for a Crypto.com private gateway. |
+| SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR | empty | Optional remote Compose directory containing the Crypto.com gateway service. |
+| SIDEKICK_CRYPTOCOM_REMOTE_USER | empty | Optional remote OS user that owns the Crypto.com environment file. |
+| SIDEKICK_CRYPTOCOM_REMOTE_SSH_PROFILE | empty | SSH MCP profile for the remote Crypto.com gateway host. |
+| SIDEKICK_DIFY_REMOTE_SSH_PROFILE | empty | SSH MCP profile for the Dify host when server-side Dify credential application is enabled. |
+| SIDEKICK_DIFY_APPLY_HELPER_PATH | empty | Remote helper that writes one-time MCP credentials through Dify's native encrypted provider storage. |
+| SIDEKICK_DIFY_BINDINGS_JSON | empty | Optional JSON mapping of MCPProxy profiles to Dify provider IDs and enforced permission lists. |
 | PUID / PGID | 1000 / 1000 | LinuxServer Chromium profile ownership. |
 | TZ | UTC | OAuth browser timezone. |
 
