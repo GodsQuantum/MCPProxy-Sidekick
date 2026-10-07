@@ -219,3 +219,25 @@ func TestLoadRejectsInvalidDifyBindings(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadCryptoComRemoteService(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CryptoComRemoteService != "cdcx-live-mcp" {
+		t.Fatalf("default Crypto.com remote service=%q", cfg.CryptoComRemoteService)
+	}
+
+	t.Setenv("SIDEKICK_CRYPTOCOM_REMOTE_SERVICE", "cryptocom-app-read")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CryptoComRemoteService != "cryptocom-app-read" {
+		t.Fatalf("configured Crypto.com remote service=%q", cfg.CryptoComRemoteService)
+	}
+}

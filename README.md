@@ -213,7 +213,8 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_CREDENTIAL_SSH_TRANSFER_ROOT | empty | Optional transfer root reachable by the configured SSH MCP. |
 | SIDEKICK_CREDENTIAL_SOURCE_SSH_PROFILE | empty | SSH MCP profile used to stage/remove transient credential files on the Sidekick host. |
 | SIDEKICK_CRYPTOCOM_REMOTE_ENV_PATH | empty | Optional destination environment file for a Crypto.com private gateway. |
-| SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR | empty | Optional remote Compose directory containing the Crypto.com gateway service. |
+| SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR | empty | Optional remote Compose directory containing the Crypto.com credential consumer. |
+| SIDEKICK_CRYPTOCOM_REMOTE_SERVICE | cdcx-live-mcp | Compose service force-recreated after credential rotation. Override it when the credential belongs to another Crypto.com surface such as the App Agent Key bridge. |
 | SIDEKICK_CRYPTOCOM_REMOTE_USER | empty | Optional remote OS user that owns the Crypto.com environment file. |
 | SIDEKICK_CRYPTOCOM_REMOTE_SSH_PROFILE | empty | SSH MCP profile for the remote Crypto.com gateway host. |
 | SIDEKICK_DIFY_REMOTE_SSH_PROFILE | empty | SSH MCP profile for the Dify host when server-side Dify credential application is enabled. |

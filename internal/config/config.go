@@ -54,6 +54,7 @@ type Config struct {
 	CredentialSourceSSHProfile string
 	CryptoComRemoteEnvPath     string
 	CryptoComRemoteComposeDir  string
+	CryptoComRemoteService     string
 	CryptoComRemoteUser        string
 	CryptoComRemoteSSHProfile  string
 	DifyRemoteSSHProfile       string
@@ -96,6 +97,7 @@ func Load() (Config, error) {
 		CredentialSourceSSHProfile: strings.TrimSpace(os.Getenv("SIDEKICK_CREDENTIAL_SOURCE_SSH_PROFILE")),
 		CryptoComRemoteEnvPath:     strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_ENV_PATH")),
 		CryptoComRemoteComposeDir:  strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR")),
+		CryptoComRemoteService:     envOr("SIDEKICK_CRYPTOCOM_REMOTE_SERVICE", "cdcx-live-mcp"),
 		CryptoComRemoteUser:        strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_USER")),
 		CryptoComRemoteSSHProfile:  strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_SSH_PROFILE")),
 		DifyRemoteSSHProfile:       strings.TrimSpace(os.Getenv("SIDEKICK_DIFY_REMOTE_SSH_PROFILE")),

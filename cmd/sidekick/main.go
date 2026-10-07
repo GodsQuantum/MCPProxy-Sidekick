@@ -130,6 +130,7 @@ func runCryptoComSetVault() {
 		SSHTransferRoot:  cfg.CredentialSSHTransferRoot,
 		RemoteEnvPath:    cfg.CryptoComRemoteEnvPath,
 		RemoteComposeDir: cfg.CryptoComRemoteComposeDir,
+		RemoteService:    cfg.CryptoComRemoteService,
 		RemoteUser:       cfg.CryptoComRemoteUser,
 		SourceSSHProfile: cfg.CredentialSourceSSHProfile,
 		RemoteSSHProfile: cfg.CryptoComRemoteSSHProfile,

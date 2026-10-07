@@ -22,6 +22,7 @@ type Adapter struct {
 	SSHTransferRoot  string
 	RemoteEnvPath    string
 	RemoteComposeDir string
+	RemoteService    string
 	RemoteUser       string
 	SourceSSHProfile string
 	RemoteSSHProfile string
@@ -46,6 +47,7 @@ func (a Adapter) Configured() bool {
 		strings.TrimSpace(a.SSHTransferRoot) != "" &&
 		strings.TrimSpace(a.RemoteEnvPath) != "" &&
 		strings.TrimSpace(a.RemoteComposeDir) != "" &&
+		strings.TrimSpace(a.RemoteService) != "" &&
 		strings.TrimSpace(a.RemoteUser) != "" &&
 		strings.TrimSpace(a.SourceSSHProfile) != "" &&
 		strings.TrimSpace(a.RemoteSSHProfile) != ""
@@ -132,12 +134,12 @@ func (a Adapter) Apply(ctx context.Context, apiKey, apiSecret string, expiresDay
 	remoteCommand := "cat " + shellQuote(remoteTmp) + " | sudo -u " + shellQuote(a.RemoteUser) + " tee " + shellQuote(a.RemoteEnvPath) + " >/dev/null" +
 		" && sudo -u " + shellQuote(a.RemoteUser) + " chmod 0600 " + shellQuote(a.RemoteEnvPath) +
 		" && cd " + shellQuote(a.RemoteComposeDir) +
-		" && docker compose up -d cdcx-live-mcp" +
+		" && docker compose up -d --no-deps --force-recreate " + shellQuote(a.RemoteService) +
 		" && rm -f -- " + shellQuote(remoteTmp)
 	if _, err := a.callDestructive(ctx, "ssh-actions:privileged-command", map[string]interface{}{
 		"profile": a.RemoteSSHProfile,
 		"command": remoteCommand,
-	}, "Install rotated Crypto.com credentials and restart only the existing live gateway"); err != nil {
+	}, "Install rotated Crypto.com credentials and force-recreate the configured credential consumer"); err != nil {
 		return Result{}, fmt.Errorf("activate Crypto.com credential: %w", err)
 	}
 
