@@ -26,41 +26,44 @@ type DifyBinding struct {
 }
 
 type Config struct {
-	ListenAddr                 string
-	MCPProxyBaseURL            string
-	MCPProxyAdminKeyFile       string
-	MCPProxyConfigFile         string
-	MCPProxyAdminKey           string
-	PublicBaseURL              string
-	MountPath                  string
-	DBPath                     string
-	AllowedHosts               []string
-	SessionLifetime            time.Duration
-	OAuthCDPURL                string
-	OAuthBrowserURL            string
-	BrowserProvider            string
-	BrowserInstance            string
-	BrowserInstances           []BrowserInstance
-	BitwardenMode              string
-	BitwardenBaseURL           string
-	PostizBaseURL              string
-	PaperlessEndpoint          string
-	ImmichKeyDir               string
-	OmniRouteDB                string
-	OpenAlexKeyFile            string
-	YouTubeOAuthControlURL     string
-	CredentialPendingHostDir   string
-	CredentialSSHTransferRoot  string
-	CredentialSourceSSHProfile string
-	CryptoComRemoteEnvPath     string
-	CryptoComRemoteComposeDir  string
-	CryptoComRemoteService     string
-	CryptoComRemoteUser        string
-	CryptoComRemoteSSHProfile  string
-	DifyRemoteSSHProfile       string
-	DifyApplyHelperPath        string
-	DifyBindings               map[string]DifyBinding
-	DemoMode                   bool
+	ListenAddr                        string
+	MCPProxyBaseURL                   string
+	MCPProxyAdminKeyFile              string
+	MCPProxyConfigFile                string
+	MCPProxyAdminKey                  string
+	PublicBaseURL                     string
+	MountPath                         string
+	DBPath                            string
+	AllowedHosts                      []string
+	SessionLifetime                   time.Duration
+	OAuthCDPURL                       string
+	OAuthBrowserURL                   string
+	BrowserProvider                   string
+	BrowserInstance                   string
+	BrowserInstances                  []BrowserInstance
+	BitwardenMode                     string
+	BitwardenBaseURL                  string
+	PostizBaseURL                     string
+	PaperlessEndpoint                 string
+	ImmichKeyDir                      string
+	OmniRouteDB                       string
+	OpenAlexKeyFile                   string
+	YouTubeOAuthControlURL            string
+	CredentialPendingHostDir          string
+	CredentialSSHTransferRoot         string
+	CredentialSourceSSHProfile        string
+	CryptoComAppRemoteEnvPath         string
+	CryptoComAppRemoteComposeDir      string
+	CryptoComAppRemoteService         string
+	CryptoComExchangeRemoteEnvPath    string
+	CryptoComExchangeRemoteComposeDir string
+	CryptoComExchangeRemoteService    string
+	CryptoComRemoteUser               string
+	CryptoComRemoteSSHProfile         string
+	DifyRemoteSSHProfile              string
+	DifyApplyHelperPath               string
+	DifyBindings                      map[string]DifyBinding
+	DemoMode                          bool
 }
 
 func Load() (Config, error) {
@@ -73,37 +76,40 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		ListenAddr:                 envOr("SIDEKICK_LISTEN_ADDR", ":8081"),
-		MCPProxyBaseURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_URL")), "/"),
-		MCPProxyAdminKeyFile:       strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE")),
-		MCPProxyConfigFile:         strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_CONFIG_FILE")),
-		PublicBaseURL:              strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_PUBLIC_BASE_URL")), "/"),
-		DBPath:                     envOr("SIDEKICK_DB_PATH", "/data/sidekick.db"),
-		AllowedHosts:               splitCSV(os.Getenv("SIDEKICK_ALLOWED_HOSTS")),
-		SessionLifetime:            lifetime,
-		OAuthCDPURL:                envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
-		OAuthBrowserURL:            strings.TrimSpace(os.Getenv("SIDEKICK_OAUTH_BROWSER_URL")),
-		BrowserProvider:            strings.ToLower(envOr("SIDEKICK_BROWSER_PROVIDER", "chromium")),
-		BitwardenMode:              strings.ToLower(envOr("SIDEKICK_BITWARDEN_MODE", "off")),
-		BitwardenBaseURL:           strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_BITWARDEN_BASE_URL")), "/"),
-		PostizBaseURL:              strings.TrimSpace(os.Getenv("SIDEKICK_POSTIZ_BASE_URL")),
-		PaperlessEndpoint:          strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
-		ImmichKeyDir:               strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
-		OmniRouteDB:                strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
-		OpenAlexKeyFile:            strings.TrimSpace(os.Getenv("SIDEKICK_OPENALEX_KEY_FILE")),
-		YouTubeOAuthControlURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL")), "/"),
-		CredentialPendingHostDir:   strings.TrimSpace(os.Getenv("SIDEKICK_CREDENTIAL_PENDING_HOST_DIR")),
-		CredentialSSHTransferRoot:  strings.TrimSpace(os.Getenv("SIDEKICK_CREDENTIAL_SSH_TRANSFER_ROOT")),
-		CredentialSourceSSHProfile: strings.TrimSpace(os.Getenv("SIDEKICK_CREDENTIAL_SOURCE_SSH_PROFILE")),
-		CryptoComRemoteEnvPath:     strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_ENV_PATH")),
-		CryptoComRemoteComposeDir:  strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR")),
-		CryptoComRemoteService:     envOr("SIDEKICK_CRYPTOCOM_REMOTE_SERVICE", "cdcx-live-mcp"),
-		CryptoComRemoteUser:        strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_USER")),
-		CryptoComRemoteSSHProfile:  strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_SSH_PROFILE")),
-		DifyRemoteSSHProfile:       strings.TrimSpace(os.Getenv("SIDEKICK_DIFY_REMOTE_SSH_PROFILE")),
-		DifyApplyHelperPath:        strings.TrimSpace(os.Getenv("SIDEKICK_DIFY_APPLY_HELPER_PATH")),
-		DifyBindings:               difyBindings,
-		DemoMode:                   parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
+		ListenAddr:                        envOr("SIDEKICK_LISTEN_ADDR", ":8081"),
+		MCPProxyBaseURL:                   strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_URL")), "/"),
+		MCPProxyAdminKeyFile:              strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE")),
+		MCPProxyConfigFile:                strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_CONFIG_FILE")),
+		PublicBaseURL:                     strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_PUBLIC_BASE_URL")), "/"),
+		DBPath:                            envOr("SIDEKICK_DB_PATH", "/data/sidekick.db"),
+		AllowedHosts:                      splitCSV(os.Getenv("SIDEKICK_ALLOWED_HOSTS")),
+		SessionLifetime:                   lifetime,
+		OAuthCDPURL:                       envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
+		OAuthBrowserURL:                   strings.TrimSpace(os.Getenv("SIDEKICK_OAUTH_BROWSER_URL")),
+		BrowserProvider:                   strings.ToLower(envOr("SIDEKICK_BROWSER_PROVIDER", "chromium")),
+		BitwardenMode:                     strings.ToLower(envOr("SIDEKICK_BITWARDEN_MODE", "off")),
+		BitwardenBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_BITWARDEN_BASE_URL")), "/"),
+		PostizBaseURL:                     strings.TrimSpace(os.Getenv("SIDEKICK_POSTIZ_BASE_URL")),
+		PaperlessEndpoint:                 strings.TrimSpace(os.Getenv("SIDEKICK_PAPERLESS_ENDPOINT")),
+		ImmichKeyDir:                      strings.TrimSpace(os.Getenv("SIDEKICK_IMMICH_KEY_DIR")),
+		OmniRouteDB:                       strings.TrimSpace(os.Getenv("SIDEKICK_OMNIROUTE_DB")),
+		OpenAlexKeyFile:                   strings.TrimSpace(os.Getenv("SIDEKICK_OPENALEX_KEY_FILE")),
+		YouTubeOAuthControlURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_YOUTUBE_OAUTH_CONTROL_URL")), "/"),
+		CredentialPendingHostDir:          strings.TrimSpace(os.Getenv("SIDEKICK_CREDENTIAL_PENDING_HOST_DIR")),
+		CredentialSSHTransferRoot:         strings.TrimSpace(os.Getenv("SIDEKICK_CREDENTIAL_SSH_TRANSFER_ROOT")),
+		CredentialSourceSSHProfile:        strings.TrimSpace(os.Getenv("SIDEKICK_CREDENTIAL_SOURCE_SSH_PROFILE")),
+		CryptoComAppRemoteEnvPath:         strings.TrimSpace(envOr("SIDEKICK_CRYPTOCOM_APP_REMOTE_ENV_PATH", os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_ENV_PATH"))),
+		CryptoComAppRemoteComposeDir:      strings.TrimSpace(envOr("SIDEKICK_CRYPTOCOM_APP_REMOTE_COMPOSE_DIR", os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_COMPOSE_DIR"))),
+		CryptoComAppRemoteService:         envOr("SIDEKICK_CRYPTOCOM_APP_REMOTE_SERVICE", envOr("SIDEKICK_CRYPTOCOM_REMOTE_SERVICE", "cryptocom-app")),
+		CryptoComExchangeRemoteEnvPath:    strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_ENV_PATH")),
+		CryptoComExchangeRemoteComposeDir: strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_COMPOSE_DIR")),
+		CryptoComExchangeRemoteService:    envOr("SIDEKICK_CRYPTOCOM_EXCHANGE_REMOTE_SERVICE", "cryptocom-exchange"),
+		CryptoComRemoteUser:               strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_USER")),
+		CryptoComRemoteSSHProfile:         strings.TrimSpace(os.Getenv("SIDEKICK_CRYPTOCOM_REMOTE_SSH_PROFILE")),
+		DifyRemoteSSHProfile:              strings.TrimSpace(os.Getenv("SIDEKICK_DIFY_REMOTE_SSH_PROFILE")),
+		DifyApplyHelperPath:               strings.TrimSpace(os.Getenv("SIDEKICK_DIFY_APPLY_HELPER_PATH")),
+		DifyBindings:                      difyBindings,
+		DemoMode:                          parseBool(os.Getenv("SIDEKICK_DEMO_MODE")),
 	}
 	if _, err := browser.Resolve(cfg.BrowserProvider); err != nil {
 		return Config{}, errors.New("invalid SIDEKICK_BROWSER_PROVIDER")
