@@ -258,6 +258,34 @@ func (s *Server) handleOAuthScopesApply(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (s *Server) cryptoComCredentialAdapter(name string) (cryptocomadapter.Adapter, bool) {
+	adapter := cryptocomadapter.Adapter{
+		Proxy:            s.Proxy,
+		PendingDir:       filepath.Join(filepath.Dir(s.Cfg.DBPath), "credential-inbox"),
+		PendingHostDir:   s.Cfg.CredentialPendingHostDir,
+		SSHTransferRoot:  s.Cfg.CredentialSSHTransferRoot,
+		RemoteUser:       s.Cfg.CryptoComRemoteUser,
+		SourceSSHProfile: s.Cfg.CredentialSourceSSHProfile,
+		RemoteSSHProfile: s.Cfg.CryptoComRemoteSSHProfile,
+	}
+	switch name {
+	case "cryptocom-app":
+		adapter.Kind = "app"
+		adapter.RemoteEnvPath = s.Cfg.CryptoComAppRemoteEnvPath
+		adapter.RemoteComposeDir = s.Cfg.CryptoComAppRemoteComposeDir
+		adapter.RemoteService = s.Cfg.CryptoComAppRemoteService
+		return adapter, true
+	case "cryptocom-exchange":
+		adapter.Kind = "exchange"
+		adapter.RemoteEnvPath = s.Cfg.CryptoComExchangeRemoteEnvPath
+		adapter.RemoteComposeDir = s.Cfg.CryptoComExchangeRemoteComposeDir
+		adapter.RemoteService = s.Cfg.CryptoComExchangeRemoteService
+		return adapter, true
+	default:
+		return cryptocomadapter.Adapter{}, false
+	}
+}
+
 func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
@@ -280,43 +308,29 @@ func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 	fingerprintInput := req.Value
 	var err error
 	switch {
-	case name == "cryptocom-live" && req.Mode == "cryptocom-api-pair":
-		adapter := cryptocomadapter.Adapter{
-			Proxy:            s.Proxy,
-			PendingDir:       filepath.Join(filepath.Dir(s.Cfg.DBPath), "credential-inbox"),
-			PendingHostDir:   s.Cfg.CredentialPendingHostDir,
-			SSHTransferRoot:  s.Cfg.CredentialSSHTransferRoot,
-			RemoteEnvPath:    s.Cfg.CryptoComRemoteEnvPath,
-			RemoteComposeDir: s.Cfg.CryptoComRemoteComposeDir,
-			RemoteService:    s.Cfg.CryptoComRemoteService,
-			RemoteUser:       s.Cfg.CryptoComRemoteUser,
-			SourceSSHProfile: s.Cfg.CredentialSourceSSHProfile,
-			RemoteSSHProfile: s.Cfg.CryptoComRemoteSSHProfile,
-		}
+	case (name == "cryptocom-app" || name == "cryptocom-exchange") && req.Mode == "cryptocom-api-pair":
+		adapter, _ := s.cryptoComCredentialAdapter(name)
 		var result cryptocomadapter.Result
 		result, err = adapter.Apply(r.Context(), req.Value, req.Secret, req.ExpiresDays)
 		if err == nil {
-			preview = "Crypto.com key " + credentials.Mask(req.Value) + " + secret set · valid until " + result.RotateBy
-			fingerprintInput = req.Value + "|" + req.Secret
+			label := "App"
+			if name == "cryptocom-exchange" {
+				label = "Exchange"
+			}
+			preview = "Crypto.com " + label + " key " + credentials.Mask(req.Value) + " + secret set · valid until " + result.RotateBy
+			fingerprintInput = name + "|" + req.Value + "|" + req.Secret
 		}
-	case name == "cryptocom-live" && req.Mode == "cryptocom-vaultwarden":
-		adapter := cryptocomadapter.Adapter{
-			Proxy:            s.Proxy,
-			PendingDir:       filepath.Join(filepath.Dir(s.Cfg.DBPath), "credential-inbox"),
-			PendingHostDir:   s.Cfg.CredentialPendingHostDir,
-			SSHTransferRoot:  s.Cfg.CredentialSSHTransferRoot,
-			RemoteEnvPath:    s.Cfg.CryptoComRemoteEnvPath,
-			RemoteComposeDir: s.Cfg.CryptoComRemoteComposeDir,
-			RemoteService:    s.Cfg.CryptoComRemoteService,
-			RemoteUser:       s.Cfg.CryptoComRemoteUser,
-			SourceSSHProfile: s.Cfg.CredentialSourceSSHProfile,
-			RemoteSSHProfile: s.Cfg.CryptoComRemoteSSHProfile,
-		}
+	case (name == "cryptocom-app" || name == "cryptocom-exchange") && req.Mode == "cryptocom-vaultwarden":
+		adapter, _ := s.cryptoComCredentialAdapter(name)
 		var result cryptocomadapter.Result
 		result, err = adapter.ApplyFromVaultwarden(r.Context(), req.VaultItem, req.ExpiresDays)
 		if err == nil {
-			preview = "Crypto.com from Vaultwarden " + strings.TrimSpace(req.VaultItem) + " · valid until " + result.RotateBy
-			fingerprintInput = "vaultwarden|" + strings.TrimSpace(req.VaultItem) + "|" + result.RotateBy
+			label := "App"
+			if name == "cryptocom-exchange" {
+				label = "Exchange"
+			}
+			preview = "Crypto.com " + label + " from Vaultwarden " + strings.TrimSpace(req.VaultItem) + " · valid until " + result.RotateBy
+			fingerprintInput = name + "|vaultwarden|" + strings.TrimSpace(req.VaultItem) + "|" + result.RotateBy
 		}
 	case name == "openalex-github" && s.Cfg.OpenAlexKeyFile != "":
 		err = (openalexadapter.Adapter{KeyFile: s.Cfg.OpenAlexKeyFile}).Apply(req.Value)
