@@ -375,18 +375,27 @@ async function startOAuth(name){
 
 function openCredential(name,opener){
   const isOpenAlex=name==="openalex-github";
+  const isCryptoLive=name==="cryptocom-live";
+  if(name==="cryptocom-market"||name==="cryptocom-paper"){
+    toast(name==="cryptocom-market"?"Crypto.com Market Data is public and needs no private credential.":"Crypto.com Paper is local simulation and needs no Crypto.com credential.");
+    return;
+  }
   const authFields=isOpenAlex
     ? '<p class="muted">OpenAlex GitHub is an optional local fallback. Paste the OpenAlex API key here; Sidekick stores it in a local 0600 secret file. Saving the key does not enable this connection.</p><label>OpenAlex API key<input id="cred-value" type="password" autocomplete="off" required></label>'
-    : '<p class="muted">The full secret is submitted once and is not returned by Sidekick afterward.</p><label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label><label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label><label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label>';
-  const submitLabel=isOpenAlex?"Save / replace API key (keep disabled)":"Save / replace & enable";
+    : isCryptoLive
+      ? '<p class="muted">Crypto.com Exchange private API requires BOTH the API key and API secret. Sidekick writes the pair to a 0600 transient file, streams it through the existing SSH MCP to the live gateway, restarts only that gateway, then removes the transient files. The secret is never stored in Sidekick metadata.</p><label>Crypto.com API key<input id="cred-value" type="password" autocomplete="off" required></label><label>Crypto.com API secret<input id="cred-secret" type="password" autocomplete="off" required></label><label>Credential lifetime (days)<input id="cred-expiry-days" type="number" min="1" max="365" value="90" required></label>'
+      : '<p class="muted">The full secret is submitted once and is not returned by Sidekick afterward.</p><label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label><label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label><label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label>';
+  const submitLabel=isOpenAlex?"Save / replace API key (keep disabled)":isCryptoLive?"SET credentials":"Save / replace & enable";
   openModal('<h2 id="modal-title">Credential · '+esc(name)+'</h2><form id="credential-form" class="form-grid">'+authFields+'<button class="primary" type="submit">'+submitLabel+'</button></form>',opener);
-  if(!isOpenAlex)$("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
+  if(!isOpenAlex&&!isCryptoLive)$("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
   $("#credential-form").onsubmit=async e=>{
     e.preventDefault();
     try{
       const payload=isOpenAlex
         ? {mode:"openalex-api-key",header_name:"",value:$("#cred-value").value}
-        : {mode:$("#cred-mode").value,header_name:$("#cred-header").value,value:$("#cred-value").value};
+        : isCryptoLive
+          ? {mode:"cryptocom-api-pair",value:$("#cred-value").value,secret:$("#cred-secret").value,expires_days:Number($("#cred-expiry-days").value||90)}
+          : {mode:$("#cred-mode").value,header_name:$("#cred-header").value,value:$("#cred-value").value};
       await api("/api/upstreams/"+encodeURIComponent(name)+"/credential",{method:"POST",body:JSON.stringify(payload)});
       closeModal(); toast(name+" credential updated"); await load();
     }catch(err){toast(err.message)}
@@ -419,7 +428,7 @@ function openToken(){
   const profiles=state.data?.profiles||[];
   if(!profiles.length){toast("Create a profile before giving MCP access to an agent.");return}
   const profileOpts=profiles.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join("");
-  openModal('<h2 id="modal-title">Give to an agent</h2><p class="muted">Sidekick creates a credential pinned to one MCPProxy profile. The agent never receives your MCPProxy admin key.</p><form id="token-form" class="form-grid"><label>Agent name<input id="token-name" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" required placeholder="archie-standby"></label><label>Profile<select id="token-profile" required>'+profileOpts+'</select></label><label>Client format<select id="agent-target"><option value="generic">Generic MCP HTTP</option><option value="n8n">n8n</option><option value="dify">Dify</option><option value="claude">Claude-compatible</option><option value="codex">Codex-compatible</option></select></label><fieldset><legend>Permissions</legend><div class="chips"><label class="chip"><input type="checkbox" name="perm" value="read" checked> read</label><label class="chip"><input type="checkbox" name="perm" value="write"> write</label><label class="chip"><input type="checkbox" name="perm" value="destructive"> destructive</label></div></fieldset><label>Expiry<input id="token-expiry" value="30d" placeholder="30d"></label><button class="primary" type="submit">Create profile-pinned credential</button></form>');
+  openModal('<h2 id="modal-title">Give to an agent</h2><p class="muted">Sidekick creates a credential pinned to one MCPProxy profile. The agent never receives your MCPProxy admin key. If this deployment defines a Dify binding for the selected profile, Sidekick applies it server-side and enforces the configured permissions.</p><form id="token-form" class="form-grid"><label>Agent name<input id="token-name" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" required placeholder="agent-name"></label><label>Profile<select id="token-profile" required>'+profileOpts+'</select></label><label>Client format<select id="agent-target"><option value="generic">Generic MCP HTTP</option><option value="n8n">n8n</option><option value="dify">Dify</option><option value="claude">Claude-compatible</option><option value="codex">Codex-compatible</option></select></label><fieldset><legend>Permissions</legend><div class="chips"><label class="chip"><input type="checkbox" name="perm" value="read" checked> read</label><label class="chip"><input type="checkbox" name="perm" value="write"> write</label><label class="chip"><input type="checkbox" name="perm" value="destructive"> destructive</label></div></fieldset><label>Expiry<input id="token-expiry" value="30d" placeholder="30d"></label><button class="primary" type="submit">Create profile-pinned credential</button></form>');
   $("#token-form").onsubmit=async e=>{
     e.preventDefault();
     const perms=$$('input[name="perm"]:checked').map(x=>x.value);
@@ -428,6 +437,7 @@ function openToken(){
     if(!confirmation)return;
     try{
       const r=await api("/api/agents/onboard",{method:"POST",body:JSON.stringify({name:$("#token-name").value,profile:$("#token-profile").value,permissions:perms,expires_in:$("#token-expiry").value,target:$("#agent-target").value,confirm_destructive:confirmation})});
+      if(r.applied){closeModal();toast(r.name+" pinned and applied to Dify");await load();return}
       showOneTimeToken(r.name,r.token,r.snippet||"");await load();
     }catch(err){toast(err.message)}
   };

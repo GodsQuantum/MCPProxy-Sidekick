@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	cryptocomadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/cryptocom"
+	difypinadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/difypin"
 	immichadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/immich"
 	omnirouteadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/omniroute"
 	openalexadapter "github.com/GodsQuantum/mcpproxy-sidekick/internal/adapters/openalex"
@@ -262,15 +265,57 @@ func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Mode       string `json:"mode"`
-		HeaderName string `json:"header_name"`
-		Value      string `json:"value"`
+		Mode        string `json:"mode"`
+		HeaderName  string `json:"header_name"`
+		Value       string `json:"value"`
+		Secret      string `json:"secret"`
+		VaultItem   string `json:"vault_item"`
+		ExpiresDays int    `json:"expires_days"`
 	}
 	if decodeJSON(w, r, &req) != nil {
 		return
 	}
+
+	preview := credentials.Mask(req.Value)
+	fingerprintInput := req.Value
 	var err error
 	switch {
+	case name == "cryptocom-live" && req.Mode == "cryptocom-api-pair":
+		adapter := cryptocomadapter.Adapter{
+			Proxy:            s.Proxy,
+			PendingDir:       filepath.Join(filepath.Dir(s.Cfg.DBPath), "credential-inbox"),
+			PendingHostDir:   s.Cfg.CredentialPendingHostDir,
+			SSHTransferRoot:  s.Cfg.CredentialSSHTransferRoot,
+			RemoteEnvPath:    s.Cfg.CryptoComRemoteEnvPath,
+			RemoteComposeDir: s.Cfg.CryptoComRemoteComposeDir,
+			RemoteUser:       s.Cfg.CryptoComRemoteUser,
+			SourceSSHProfile: s.Cfg.CredentialSourceSSHProfile,
+			RemoteSSHProfile: s.Cfg.CryptoComRemoteSSHProfile,
+		}
+		var result cryptocomadapter.Result
+		result, err = adapter.Apply(r.Context(), req.Value, req.Secret, req.ExpiresDays)
+		if err == nil {
+			preview = "Crypto.com key " + credentials.Mask(req.Value) + " + secret set · valid until " + result.RotateBy
+			fingerprintInput = req.Value + "|" + req.Secret
+		}
+	case name == "cryptocom-live" && req.Mode == "cryptocom-vaultwarden":
+		adapter := cryptocomadapter.Adapter{
+			Proxy:            s.Proxy,
+			PendingDir:       filepath.Join(filepath.Dir(s.Cfg.DBPath), "credential-inbox"),
+			PendingHostDir:   s.Cfg.CredentialPendingHostDir,
+			SSHTransferRoot:  s.Cfg.CredentialSSHTransferRoot,
+			RemoteEnvPath:    s.Cfg.CryptoComRemoteEnvPath,
+			RemoteComposeDir: s.Cfg.CryptoComRemoteComposeDir,
+			RemoteUser:       s.Cfg.CryptoComRemoteUser,
+			SourceSSHProfile: s.Cfg.CredentialSourceSSHProfile,
+			RemoteSSHProfile: s.Cfg.CryptoComRemoteSSHProfile,
+		}
+		var result cryptocomadapter.Result
+		result, err = adapter.ApplyFromVaultwarden(r.Context(), req.VaultItem, req.ExpiresDays)
+		if err == nil {
+			preview = "Crypto.com from Vaultwarden " + strings.TrimSpace(req.VaultItem) + " · valid until " + result.RotateBy
+			fingerprintInput = "vaultwarden|" + strings.TrimSpace(req.VaultItem) + "|" + result.RotateBy
+		}
 	case name == "openalex-github" && s.Cfg.OpenAlexKeyFile != "":
 		err = (openalexadapter.Adapter{KeyFile: s.Cfg.OpenAlexKeyFile}).Apply(req.Value)
 	case name == "postiz" && s.Cfg.PostizBaseURL != "":
@@ -290,8 +335,8 @@ func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	_ = s.Store.UpsertCredentialMeta(storage.CredentialMeta{ServerName: name, MaskedPreview: credentials.Mask(req.Value), Fingerprint: credentials.Fingerprint(req.Value), UpdatedAt: time.Now().UTC().Format(time.RFC3339)})
-	writeJSON(w, 200, map[string]any{"ok": true, "preview": credentials.Mask(req.Value)})
+	_ = s.Store.UpsertCredentialMeta(storage.CredentialMeta{ServerName: name, MaskedPreview: preview, Fingerprint: credentials.Fingerprint(fingerprintInput), UpdatedAt: time.Now().UTC().Format(time.RFC3339)})
+	writeJSON(w, 200, map[string]any{"ok": true, "preview": preview})
 }
 
 func (s *Server) handleOmniRouteRestoreMaster(w http.ResponseWriter, r *http.Request) {
@@ -313,13 +358,18 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "missing server name")
 		return
 	}
+	instance, err := s.ensureActiveBrowser(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	browser := oauth.Browser{CDPBaseURL: instance.CDPURL, PublicSessionURL: instance.BrowserURL}
 	if strings.TrimSpace(s.Cfg.YouTubeOAuthControlURL) != "" && youtubeoauthadapter.MatchesServer(name) {
 		start, err := (youtubeoauthadapter.Adapter{BaseURL: s.Cfg.YouTubeOAuthControlURL}).Start(r.Context())
 		if err != nil {
 			writeError(w, 502, err.Error())
 			return
 		}
-		browser := s.activeBrowser()
 		if err := browser.Open(r.Context(), start.AuthURL); err != nil {
 			writeError(w, 502, err.Error())
 			return
@@ -327,7 +377,7 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"browser_url": browser.SessionURL(), "provider": "youtube", "profile": "full"})
 		return
 	}
-	result, err := s.OAuth.StartWithBrowser(r.Context(), name, s.activeBrowser())
+	result, err := s.OAuth.StartWithBrowser(r.Context(), name, browser)
 	if err != nil {
 		writeError(w, 502, err.Error())
 		return
@@ -525,6 +575,18 @@ func (s *Server) handleAgentOnboard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "profile does not exist")
 		return
 	}
+
+	// Optional deployment-defined Dify bindings are applied server-side so the
+	// one-time MCPProxy token never leaves Sidekick. The configured permission
+	// set is authoritative and prevents the browser from widening privileges.
+	difyProviderID := ""
+	if req.Target == "dify" {
+		if binding, ok := s.Cfg.DifyBindings[req.Profile]; ok {
+			difyProviderID = binding.ProviderID
+			req.Permissions = append([]string(nil), binding.Permissions...)
+		}
+	}
+
 	created, err := s.Tokens.Create(r.Context(), tokens.CreateRequest{
 		Name: req.Name, AllowedServers: []string{"*"}, Permissions: req.Permissions,
 		ExpiresIn: req.ExpiresIn, ProfilePin: req.Profile, ConfirmDestructive: req.ConfirmDestructive,
@@ -533,6 +595,29 @@ func (s *Server) handleAgentOnboard(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	if difyProviderID != "" {
+		adapter := difypinadapter.Adapter{
+			Proxy:            s.Proxy,
+			PendingDir:       filepath.Join(filepath.Dir(s.Cfg.DBPath), "credential-inbox"),
+			PendingHostDir:   s.Cfg.CredentialPendingHostDir,
+			SSHTransferRoot:  s.Cfg.CredentialSSHTransferRoot,
+			SourceSSHProfile: s.Cfg.CredentialSourceSSHProfile,
+			RemoteSSHProfile: s.Cfg.DifyRemoteSSHProfile,
+			RemoteHelperPath: s.Cfg.DifyApplyHelperPath,
+		}
+		if err := adapter.Apply(r.Context(), created.Name, difyProviderID, req.Profile, created.Token); err != nil {
+			_ = s.Tokens.Delete(context.Background(), created.Name)
+			writeError(w, http.StatusBadGateway, "Dify credential apply failed; new token removed: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"name": created.Name, "profile": req.Profile, "selected_target": req.Target,
+			"expires_at": created.ExpiresAt, "applied": true, "provider_id": difyProviderID,
+		})
+		return
+	}
+
 	endpoint := s.agentProfileEndpoint(req.Profile)
 	bearer := "Bearer " + created.Token
 	snippets := map[string]string{
@@ -632,8 +717,33 @@ func (s *Server) activeBrowser() oauth.Browser {
 	return oauth.Browser{CDPBaseURL: instance.CDPURL, PublicSessionURL: instance.BrowserURL}
 }
 
-func (s *Server) handleBrowserOpen(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ensureActiveBrowser(ctx context.Context) (config.BrowserInstance, error) {
 	instance := s.activeBrowserInstance()
+	if strings.TrimSpace(instance.LaunchURL) == "" {
+		return instance, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, instance.LaunchURL, nil)
+	if err != nil {
+		return instance, fmt.Errorf("prepare browser launch: %w", err)
+	}
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return instance, fmt.Errorf("launch browser instance %q: %w", instance.ID, err)
+	}
+	defer resp.Body.Close()
+	if (resp.StatusCode >= 200 && resp.StatusCode < 300) || resp.StatusCode == http.StatusConflict {
+		return instance, nil
+	}
+	return instance, fmt.Errorf("launch browser instance %q: HTTP %s", instance.ID, resp.Status)
+}
+
+func (s *Server) handleBrowserOpen(w http.ResponseWriter, r *http.Request) {
+	instance, err := s.ensureActiveBrowser(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
 	if strings.TrimSpace(instance.BrowserURL) == "" {
 		writeError(w, http.StatusServiceUnavailable, "browser instance has no visible session URL")
 		return
