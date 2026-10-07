@@ -20,6 +20,7 @@ type Adapter struct {
 	PendingDir       string
 	PendingHostDir   string
 	SSHTransferRoot  string
+	Kind             string
 	RemoteEnvPath    string
 	RemoteComposeDir string
 	RemoteService    string
@@ -41,7 +42,9 @@ type vaultSearchResult struct {
 }
 
 func (a Adapter) Configured() bool {
-	return a.Proxy != nil &&
+	kind := strings.ToLower(strings.TrimSpace(a.Kind))
+	return (kind == "app" || kind == "exchange") &&
+		a.Proxy != nil &&
 		strings.TrimSpace(a.PendingDir) != "" &&
 		strings.TrimSpace(a.PendingHostDir) != "" &&
 		strings.TrimSpace(a.SSHTransferRoot) != "" &&
@@ -75,16 +78,23 @@ func (a Adapter) Apply(ctx context.Context, apiKey, apiSecret string, expiresDay
 	if err := os.MkdirAll(a.PendingDir, 0o700); err != nil {
 		return Result{}, fmt.Errorf("create credential inbox: %w", err)
 	}
-	pendingName := "cryptocom-live.env"
+	kind := strings.ToLower(strings.TrimSpace(a.Kind))
+	pendingName := "cryptocom-" + kind + ".env"
 	pendingPath := filepath.Join(a.PendingDir, pendingName)
-	tmp, err := os.CreateTemp(a.PendingDir, ".cryptocom-live-*.tmp")
+	tmp, err := os.CreateTemp(a.PendingDir, ".cryptocom-"+kind+"-*.tmp")
 	if err != nil {
 		return Result{}, fmt.Errorf("create pending credential: %w", err)
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
 	_ = tmp.Chmod(0o600)
-	body := "CDCX_API_KEY=" + apiKey + "\nCDCX_API_SECRET=" + apiSecret + "\nCDCX_PROFILE=live\n"
+	body := ""
+	switch kind {
+	case "app":
+		body = "CDC_API_KEY=" + apiKey + "\nCDC_API_SECRET=" + apiSecret + "\n"
+	case "exchange":
+		body = "CDCX_API_KEY=" + apiKey + "\nCDCX_API_SECRET=" + apiSecret + "\nCDCX_PROFILE=live\n"
+	}
 	if _, err := tmp.WriteString(body); err != nil {
 		_ = tmp.Close()
 		return Result{}, fmt.Errorf("write pending credential: %w", err)
@@ -102,7 +112,7 @@ func (a Adapter) Apply(ctx context.Context, apiKey, apiSecret string, expiresDay
 
 	hostPending := filepath.Join(a.PendingHostDir, pendingName)
 	transferFile := filepath.Join(a.SSHTransferRoot, pendingName)
-	remoteTmp := "/tmp/cryptocom-live.env.sidekick"
+	remoteTmp := "/tmp/cryptocom-" + kind + ".env.sidekick"
 
 	cleanupPending := func() { _ = os.Remove(pendingPath) }
 	cleanupTransfer := func() {
@@ -134,7 +144,7 @@ func (a Adapter) Apply(ctx context.Context, apiKey, apiSecret string, expiresDay
 	remoteCommand := "cat " + shellQuote(remoteTmp) + " | sudo -u " + shellQuote(a.RemoteUser) + " tee " + shellQuote(a.RemoteEnvPath) + " >/dev/null" +
 		" && sudo -u " + shellQuote(a.RemoteUser) + " chmod 0600 " + shellQuote(a.RemoteEnvPath) +
 		" && cd " + shellQuote(a.RemoteComposeDir) +
-		" && docker compose up -d --no-deps --force-recreate " + shellQuote(a.RemoteService) +
+		" && docker compose up -d --no-deps --force-recreate --remove-orphans " + shellQuote(a.RemoteService) +
 		" && rm -f -- " + shellQuote(remoteTmp)
 	if _, err := a.callDestructive(ctx, "ssh-actions:privileged-command", map[string]interface{}{
 		"profile": a.RemoteSSHProfile,
