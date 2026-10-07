@@ -158,17 +158,20 @@ func TestLoadReadsBraveAndManagedBitwarden(t *testing.T) {
 func TestLoadBrowserInstances(t *testing.T) {
 	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
 	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
-	t.Setenv("SIDEKICK_BROWSER_INSTANCE", "playwright-primary")
-	t.Setenv("SIDEKICK_BROWSER_INSTANCES_JSON", `[{"id":"playwright-primary","label":"Primary","cdp_url":"http://primary:9222","browser_url":"/control/primary/"},{"id":"playwright-secondary","label":"Secondary","cdp_url":"http://secondary:9222","browser_url":"/control/secondary/"}]`)
+	t.Setenv("SIDEKICK_BROWSER_INSTANCE", "cloak-primary")
+	t.Setenv("SIDEKICK_BROWSER_INSTANCES_JSON", `[{"id":"cloak-primary","label":"Primary","cdp_url":"http://manager:8080/api/profiles/a/cdp","browser_url":"https://browser.example.com/","launch_url":"http://manager:8080/api/profiles/a/launch"},{"id":"cloak-secondary","label":"Secondary","cdp_url":"http://manager:8080/api/profiles/b/cdp","browser_url":"https://browser.example.com/","launch_url":"http://manager:8080/api/profiles/b/launch"}]`)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.BrowserInstance != "playwright-primary" || len(cfg.BrowserInstances) != 2 {
+	if cfg.BrowserInstance != "cloak-primary" || len(cfg.BrowserInstances) != 2 {
 		t.Fatalf("browser registry=%#v selected=%q", cfg.BrowserInstances, cfg.BrowserInstance)
 	}
-	if cfg.OAuthCDPURL != "http://primary:9222" || cfg.OAuthBrowserURL != "/control/primary/" {
+	if cfg.OAuthCDPURL != "http://manager:8080/api/profiles/a/cdp" || cfg.OAuthBrowserURL != "https://browser.example.com/" {
 		t.Fatalf("selected browser not applied: %#v", cfg)
+	}
+	if cfg.BrowserInstances[0].LaunchURL != "http://manager:8080/api/profiles/a/launch" {
+		t.Fatalf("launch URL not applied: %#v", cfg.BrowserInstances[0])
 	}
 }
 
@@ -179,5 +182,40 @@ func TestLoadRejectsUnknownBrowserInstance(t *testing.T) {
 	t.Setenv("SIDEKICK_BROWSER_INSTANCES_JSON", `[{"id":"playwright-primary","cdp_url":"http://primary:9222","browser_url":"/control/primary/"}]`)
 	if _, err := Load(); err == nil {
 		t.Fatal("expected unknown browser instance to fail")
+	}
+}
+
+func TestLoadDifyBindings(t *testing.T) {
+	t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+	t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+	t.Setenv("SIDEKICK_DIFY_BINDINGS_JSON", `{"research":{"provider_id":"provider-read","permissions":["READ"]},"actions":{"provider_id":" provider-actions ","permissions":["read","write"]}}`)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.DifyBindings["research"]; got.ProviderID != "provider-read" || len(got.Permissions) != 1 || got.Permissions[0] != "read" {
+		t.Fatalf("research binding=%#v", got)
+	}
+	if got := cfg.DifyBindings["actions"]; got.ProviderID != "provider-actions" || len(got.Permissions) != 2 || got.Permissions[0] != "read" || got.Permissions[1] != "write" {
+		t.Fatalf("actions binding=%#v", got)
+	}
+}
+
+func TestLoadRejectsInvalidDifyBindings(t *testing.T) {
+	for name, raw := range map[string]string{
+		"invalid json":         `{`,
+		"missing permissions":  `{"profile":{"provider_id":"provider","permissions":[]}}`,
+		"invalid permission":   `{"profile":{"provider_id":"provider","permissions":["admin"]}}`,
+		"duplicate permission": `{"profile":{"provider_id":"provider","permissions":["read","READ"]}}`,
+		"normalized duplicate": `{"profile":{"provider_id":"one","permissions":["read"]}," profile ":{"provider_id":"two","permissions":["read"]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("SIDEKICK_MCPPROXY_URL", "http://mcpproxy:8080")
+			t.Setenv("SIDEKICK_MCPPROXY_ADMIN_KEY_FILE", "/run/secrets/mcpproxy_admin_key")
+			t.Setenv("SIDEKICK_DIFY_BINDINGS_JSON", raw)
+			if _, err := Load(); err == nil {
+				t.Fatal("expected invalid Dify bindings to fail")
+			}
+		})
 	}
 }
