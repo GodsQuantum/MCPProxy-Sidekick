@@ -122,3 +122,24 @@ func cloneMap(in map[string]any) map[string]any {
 	}
 	return out
 }
+
+func TestEnsureRedirectURIAppliesAndIsIdempotent(t *testing.T) {
+	b := &fakeBackend{doc: configFixture()}
+	s := Service{Backend: b}
+	changed, err := s.EnsureRedirectURI(context.Background(), "google", "http://127.0.0.1:54108/oauth/callback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected redirect URI change")
+	}
+	server := b.doc["mcpServers"].(map[string]any)["google"].(map[string]any)
+	oauth := server["oauth"].(map[string]any)
+	if oauth["redirect_uri"] != "http://127.0.0.1:54108/oauth/callback" {
+		t.Fatalf("redirect_uri=%v", oauth["redirect_uri"])
+	}
+	changed, err = s.EnsureRedirectURI(context.Background(), "google", "http://127.0.0.1:54108/oauth/callback")
+	if err != nil || changed {
+		t.Fatalf("idempotent changed=%v err=%v", changed, err)
+	}
+}

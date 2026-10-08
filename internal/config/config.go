@@ -38,6 +38,7 @@ type Config struct {
 	SessionLifetime                   time.Duration
 	OAuthCDPURL                       string
 	OAuthBrowserURL                   string
+	OAuthRedirects                    map[string]string
 	BrowserProvider                   string
 	BrowserInstance                   string
 	BrowserInstances                  []BrowserInstance
@@ -75,6 +76,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	oauthRedirects, err := loadOAuthRedirects(os.Getenv("SIDEKICK_OAUTH_REDIRECTS_JSON"))
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		ListenAddr:                        envOr("SIDEKICK_LISTEN_ADDR", ":8081"),
 		MCPProxyBaseURL:                   strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_MCPPROXY_URL")), "/"),
@@ -86,6 +91,7 @@ func Load() (Config, error) {
 		SessionLifetime:                   lifetime,
 		OAuthCDPURL:                       envOr("SIDEKICK_OAUTH_CDP_URL", "http://127.0.0.1:9222"),
 		OAuthBrowserURL:                   strings.TrimSpace(os.Getenv("SIDEKICK_OAUTH_BROWSER_URL")),
+		OAuthRedirects:                    oauthRedirects,
 		BrowserProvider:                   strings.ToLower(envOr("SIDEKICK_BROWSER_PROVIDER", "chromium")),
 		BitwardenMode:                     strings.ToLower(envOr("SIDEKICK_BITWARDEN_MODE", "off")),
 		BitwardenBaseURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv("SIDEKICK_BITWARDEN_BASE_URL")), "/"),
@@ -205,6 +211,31 @@ func loadDifyBindings(raw string) (map[string]DifyBinding, error) {
 		bindings[profile] = binding
 	}
 	return bindings, nil
+}
+
+func loadOAuthRedirects(raw string) (map[string]string, error) {
+	out := map[string]string{}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return out, nil
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, errors.New("invalid SIDEKICK_OAUTH_REDIRECTS_JSON")
+	}
+	for rawName, rawURI := range parsed {
+		name := strings.TrimSpace(rawName)
+		uri := strings.TrimSpace(rawURI)
+		if name == "" || uri == "" {
+			return nil, errors.New("SIDEKICK_OAUTH_REDIRECTS_JSON requires non-empty server names and URLs")
+		}
+		u, err := url.Parse(uri)
+		if err != nil || u.Scheme != "http" || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") || u.Port() == "" {
+			return nil, errors.New("SIDEKICK_OAUTH_REDIRECTS_JSON values must be HTTP loopback URLs with explicit ports")
+		}
+		out[name] = uri
+	}
+	return out, nil
 }
 
 func envOr(key, fallback string) string {
