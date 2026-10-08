@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"os"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -24,6 +25,10 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize sidekick metadata db: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("secure sidekick metadata db: %w", err)
 	}
 	return &Store{db: db}, nil
 }
@@ -75,5 +80,39 @@ func (s *Store) SetSetting(key, value string) error {
 		"INSERT INTO settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
 		key, value, time.Now().UTC().Format(time.RFC3339Nano),
 	)
+	return err
+}
+
+func (s *Store) SaveAuthSession(id, csrf string, expiresAt time.Time) error {
+	_, err := s.db.Exec(
+		"INSERT INTO auth_sessions(session_id,csrf_token,expires_at) VALUES(?,?,?) ON CONFLICT(session_id) DO UPDATE SET csrf_token=excluded.csrf_token, expires_at=excluded.expires_at",
+		id, csrf, expiresAt.UTC().Format(time.RFC3339Nano),
+	)
+	return err
+}
+
+func (s *Store) AuthSession(id string) (string, time.Time, bool, error) {
+	var csrf, rawExpiry string
+	err := s.db.QueryRow("SELECT csrf_token,expires_at FROM auth_sessions WHERE session_id=?", id).Scan(&csrf, &rawExpiry)
+	if err == sql.ErrNoRows {
+		return "", time.Time{}, false, nil
+	}
+	if err != nil {
+		return "", time.Time{}, false, err
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, rawExpiry)
+	if err != nil {
+		return "", time.Time{}, false, err
+	}
+	return csrf, expiresAt, true, nil
+}
+
+func (s *Store) DeleteAuthSession(id string) error {
+	_, err := s.db.Exec("DELETE FROM auth_sessions WHERE session_id=?", id)
+	return err
+}
+
+func (s *Store) PurgeExpiredAuthSessions(now time.Time) error {
+	_, err := s.db.Exec("DELETE FROM auth_sessions WHERE expires_at<=?", now.UTC().Format(time.RFC3339Nano))
 	return err
 }

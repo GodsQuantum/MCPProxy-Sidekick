@@ -257,3 +257,23 @@ func TestLoadCryptoComLegacyAppFallback(t *testing.T) {
 		t.Fatalf("legacy app fallback env=%q service=%q", cfg.CryptoComAppRemoteEnvPath, cfg.CryptoComAppRemoteService)
 	}
 }
+
+func TestLoadOAuthRedirects(t *testing.T) {
+	t.Setenv("SIDEKICK_DEMO_MODE", "1")
+	t.Setenv("SIDEKICK_OAUTH_REDIRECTS_JSON", "{\"google\":\"http://127.0.0.1:54108/oauth/callback\"}")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OAuthRedirects["google"] != "http://127.0.0.1:54108/oauth/callback" {
+		t.Fatalf("redirect=%q", cfg.OAuthRedirects["google"])
+	}
+}
+
+func TestRejectNonLoopbackOAuthRedirect(t *testing.T) {
+	t.Setenv("SIDEKICK_DEMO_MODE", "1")
+	t.Setenv("SIDEKICK_OAUTH_REDIRECTS_JSON", "{\"google\":\"https://example.com/callback\"}")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected non-loopback redirect rejection")
+	}
+}
