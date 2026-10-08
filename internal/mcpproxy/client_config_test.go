@@ -44,3 +44,25 @@ func TestConfigReadValidateApplyUsesOfficialEndpoints(t *testing.T) {
 		t.Fatalf("validated=%v applied=%v", validated, applied)
 	}
 }
+
+func TestDecodeConfigDocumentUnwrapsNestedDataConfig(t *testing.T) {
+	raw, err := json.Marshal(map[string]any{
+		"data": map[string]any{
+			"config": map[string]any{
+				"mcpServers": []any{
+					map[string]any{"name": "google", "oauth": map[string]any{}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := decodeConfigDocument(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := doc["mcpServers"]; !ok {
+		t.Fatalf("doc=%#v", doc)
+	}
+}

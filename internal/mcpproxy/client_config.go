@@ -54,15 +54,27 @@ func decodeConfigDocument(raw json.RawMessage) (map[string]any, error) {
 	if err := json.Unmarshal(raw, &direct); err != nil {
 		return nil, fmt.Errorf("decode MCPProxy config: %w", err)
 	}
-	for _, key := range []string{"config", "data"} {
-		if child, ok := direct[key]; ok {
-			if doc, ok := child.(map[string]any); ok {
-				return doc, nil
-			}
-		}
-	}
-	if _, ok := direct["mcpServers"]; ok {
-		return direct, nil
+	if doc, ok := unwrapConfigDocument(direct, 0); ok {
+		return doc, nil
 	}
 	return nil, errors.New("MCPProxy config response did not contain config document")
+}
+
+func unwrapConfigDocument(doc map[string]any, depth int) (map[string]any, bool) {
+	if depth > 4 || doc == nil {
+		return nil, false
+	}
+	if _, ok := doc["mcpServers"]; ok {
+		return doc, true
+	}
+	for _, key := range []string{"config", "data"} {
+		child, ok := doc[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		if unwrapped, ok := unwrapConfigDocument(child, depth+1); ok {
+			return unwrapped, true
+		}
+	}
+	return nil, false
 }
