@@ -106,6 +106,8 @@ Your client machine needs no SSH tunnel, callback daemon or local helper.
 
 If Sidekick and the OAuth browser use a normal Docker bridge instead of sharing the MCPProxy network namespace, Chromium may still bind DevTools to loopback. Set `SIDEKICK_CDP_RELAY_ENABLE=true` on the OAuth browser and point `SIDEKICK_OAUTH_CDP_URL` at `http://<oauth-browser-service>:9223`. The relay helper is versioned separately as `deploy/oauth-browser/cdp-relay.py`; only `90-sidekick-chromium` is mounted into `/custom-cont-init.d`, so helper files and backups cannot be executed accidentally by LinuxServer init.
 
+For a Human Auth Browser that intentionally runs in a separate network namespace (for example CloakBrowser Manager), OAuth provider callbacks may still be required to use a loopback URI. Configure a stable callback with `SIDEKICK_OAUTH_REDIRECTS_JSON` and provide a deployment-level TCP relay from the browser namespace's `127.0.0.1:<port>` to the same loopback port in the MCPProxy namespace. Sidekick pins that callback just before reconnect, so normal connected upstreams are not disturbed until a human explicitly starts OAuth.
+
 Connectors with their own clean remote OAuth/device-code flow can still use that native flow instead. For FastMCP/OIDC-proxy interoperability, see [FastMCP OAuth interoperability](docs/fastmcp-oauth.md), including the security constraints around `require_authorization_consent="external"`.
 
 ## 👥 Profiles
@@ -150,7 +152,7 @@ Sidekick is an **administrative UI** for MCPProxy. Treat access to it as privile
 - CSP blocks remote scripts;
 - credential request bodies are never logged;
 - full secrets are never returned by Sidekick after submission;
-- SQLite stores only metadata, masked previews and SHA-256 fingerprints;
+- SQLite stores credential metadata plus opaque Sidekick session IDs, CSRF tokens and expirations; it never stores the MCPProxy admin key or recoverable upstream credentials;
 - OAuth browser requires an authenticated Sidekick session;
 - no Docker socket;
 - non-root runtime;
@@ -180,7 +182,7 @@ Sidekick intentionally stores no recoverable credential vault.
 1. restore/start MCPProxy;
 2. clone Sidekick;
 3. recreate <code>secrets/mcpproxy_admin_key</code>;
-4. restore Sidekick's optional data volume if you want masked credential metadata; native Profiles are restored with MCPProxy;
+4. restore Sidekick's data volume if you want masked credential metadata and active admin sessions to survive; native Profiles are restored with MCPProxy;
 5. run <code>docker compose up -d</code>;
 6. reconnect credentials/OAuth that are not already persisted by MCPProxy/upstream volumes.
 
@@ -196,7 +198,9 @@ Even without Sidekick's SQLite file, MCPProxy remains authoritative for its serv
 | SIDEKICK_PUBLIC_BASE_URL | https://mcp.example.com/control/ | Public control-panel URL. |
 | SIDEKICK_MOUNT_PATH | /control | Reverse-proxy mount path. Change this to /command or another prefix if desired. |
 | SIDEKICK_ALLOWED_HOSTS | mcp.example.com | Trusted browser Host/Origin values. |
-| SIDEKICK_SESSION_LIFETIME | 720h | Admin session lifetime. |
+| SIDEKICK_SESSION_LIFETIME | 720h | Admin session lifetime. Sessions are persisted in the Sidekick SQLite data volume so container recreation does not silently log the operator out. |
+| SIDEKICK_OAUTH_BROWSER_URL | derived | Public HTTPS URL used to show the Human Auth Browser to the operator. |
+| SIDEKICK_OAUTH_REDIRECTS_JSON | empty | Optional JSON map of upstream server name to a fixed HTTP loopback callback URL. Sidekick validates loopback-only URLs and applies them through MCPProxy immediately before reconnect. |
 | SIDEKICK_OAUTH_CDP_URL | http://127.0.0.1:9222 | Human Auth Browser DevTools endpoint. With a separate browser network namespace and the relay enabled, use `http://oauth-browser:9223`. |
 | SIDEKICK_BROWSER_PROVIDER | chromium | Human Auth Browser provider: `chromium` or `brave`. |
 | SIDEKICK_BROWSER_IMAGE | lscr.io/linuxserver/chromium:latest | Browser container image. The guarded switch script updates this with the provider. |
@@ -272,4 +276,4 @@ Sidekick reconnects OAuth servers transactionally:
 - **CloakBrowser-compatible CDP.** Sidekick keeps Chromium's native PUT /json/new fast path and falls back to the browser-level DevTools WebSocket Target.createTarget command when a CDP relay (such as CloakBrowser Manager) does not expose /json/new.
 - **Actionable errors.** Failures are reported by stage (start OAuth session vs open OAuth browser) without logging authorization URLs, tokens or secrets.
 
-For production, keep the upstream MCP server's OAuth/token store on persistent storage. An Internet outage should be handled by reconnect/retry; it should never trigger automatic token deletion.
+For production, keep the upstream MCP server's OAuth/token store on persistent storage. Sidekick's own admin sessions are persisted in its SQLite data volume and remain valid across container recreation until their configured expiry or explicit logout. An Internet outage should be handled by reconnect/retry; it should never trigger automatic token deletion.

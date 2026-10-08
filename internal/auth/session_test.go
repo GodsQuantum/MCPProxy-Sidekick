@@ -59,3 +59,55 @@ func TestSessionExpires(t *testing.T) {
 		t.Fatal("expired session accepted")
 	}
 }
+
+type memorySessionStore struct {
+	sessions map[string]Session
+}
+
+func (m *memorySessionStore) SaveAuthSession(id, csrf string, expiresAt time.Time) error {
+	if m.sessions == nil {
+		m.sessions = map[string]Session{}
+	}
+	m.sessions[id] = Session{ID: id, CSRFToken: csrf, ExpiresAt: expiresAt}
+	return nil
+}
+func (m *memorySessionStore) AuthSession(id string) (string, time.Time, bool, error) {
+	s, ok := m.sessions[id]
+	return s.CSRFToken, s.ExpiresAt, ok, nil
+}
+func (m *memorySessionStore) DeleteAuthSession(id string) error {
+	delete(m.sessions, id)
+	return nil
+}
+func (m *memorySessionStore) PurgeExpiredAuthSessions(now time.Time) error {
+	for id, s := range m.sessions {
+		if !now.Before(s.ExpiresAt) {
+			delete(m.sessions, id)
+		}
+	}
+	return nil
+}
+
+func TestPersistentSessionSurvivesManagerRestart(t *testing.T) {
+	store := &memorySessionStore{}
+	m1, err := NewPersistentManagerFromKey("secret-key", time.Hour, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := m1.Login("secret-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, err := NewPersistentManagerFromKey("secret-key", time.Hour, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := m2.Validate(s.ID)
+	if !ok || got.CSRFToken != s.CSRFToken || !got.ExpiresAt.Equal(s.ExpiresAt) {
+		t.Fatalf("restored=%+v ok=%v want=%+v", got, ok, s)
+	}
+	m2.Delete(s.ID)
+	if _, ok := m1.Validate(s.ID); ok {
+		t.Fatal("deleted persistent session was restored")
+	}
+}

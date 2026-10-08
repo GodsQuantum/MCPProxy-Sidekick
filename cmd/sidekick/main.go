@@ -61,15 +61,20 @@ func main() {
 			}
 			log.Printf("Dropped runtime privileges to uid=%d gid=%d", target.UID, target.GID)
 		}
+		store, err := storage.Open(cfg.DBPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer store.Close()
 		var authManager *auth.Manager
 		var proxy *mcpproxy.Client
 		if cfg.MCPProxyAdminKey != "" {
-			authManager, err = auth.NewManagerFromKey(cfg.MCPProxyAdminKey, cfg.SessionLifetime)
+			authManager, err = auth.NewPersistentManagerFromKey(cfg.MCPProxyAdminKey, cfg.SessionLifetime, store)
 			if err == nil {
 				proxy, err = mcpproxy.NewClientWithKey(cfg.MCPProxyBaseURL, cfg.MCPProxyAdminKey)
 			}
 		} else {
-			authManager, err = auth.NewManager(cfg.MCPProxyAdminKeyFile, cfg.SessionLifetime)
+			authManager, err = auth.NewPersistentManager(cfg.MCPProxyAdminKeyFile, cfg.SessionLifetime, store)
 			if err == nil {
 				proxy, err = mcpproxy.NewClient(cfg.MCPProxyBaseURL, cfg.MCPProxyAdminKeyFile)
 			}
@@ -77,11 +82,6 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		store, err := storage.Open(cfg.DBPath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer store.Close()
 		app.Auth = authManager
 		app.Proxy = proxy
 		app.Store = store

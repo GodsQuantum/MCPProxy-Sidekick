@@ -19,6 +19,8 @@ Supported providers:
 
 Both providers use Selkies for the visible browser and private CDP on loopback.
 
+When the Human Auth Browser is a separate service/network namespace, prefer a stable OAuth loopback callback plus a narrowly scoped TCP relay instead of rewriting provider callback URLs. `SIDEKICK_OAUTH_REDIRECTS_JSON` maps upstream names to fixed loopback callbacks. Sidekick applies the configured redirect through MCPProxy only when a reconnect is explicitly started; the browser-side relay then forwards that loopback port to the MCPProxy namespace. Keep relay ports internal to the Docker network and do not publish them on the LAN.
+
 A deployment may declare multiple persistent browser instances (for example separate primary/secondary profiles) and reuse them for both Playwright automation and human OAuth. When those browsers share `network_mode: container:<mcpproxy>`, assign each instance distinct GUI, Selkies control, browser CDP and optional CDP-relay ports. The provider OAuth callback to `127.0.0.1:<dynamic-port>` then reaches MCPProxy naturally because the browser and MCPProxy share the same loopback. Add every shared-netns browser container to `MCPPROXY_SIDECARS` so the namespace guard rebinds it after an MCPProxy restart.
 
 Example Brave settings:
@@ -88,6 +90,7 @@ On an unexpected disconnect or EOF, Sidekick falls back to visibility-aware poll
 - Visible browser UI stays behind Sidekick authentication.
 - AI agents never get generic Human Auth Browser/CDP access.
 - Admin-key login becomes a server-side HttpOnly session; the key is not stored in browser storage.
+- Sidekick sessions are persisted in the existing SQLite data volume. A Sidekick container restart/recreate therefore preserves valid sessions; explicit logout and expiry remove them from the persistent store.
 - Mutations require CSRF and trusted Origin/Host.
 - Full MCPProxy config and credentials remain server-side.
 - Sidekick keeps read-only root filesystem, dropped capabilities, and no-new-privileges.
