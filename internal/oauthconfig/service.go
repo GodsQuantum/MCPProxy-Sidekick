@@ -139,17 +139,9 @@ func locateOAuth(doc map[string]any, name string) (map[string]any, map[string]an
 	if !ok {
 		return nil, nil, errors.New("MCPProxy config has no mcpServers")
 	}
-	servers, ok := rawServers.(map[string]any)
-	if !ok {
-		return nil, nil, errors.New("MCPProxy mcpServers has unsupported shape")
-	}
-	rawServer, ok := servers[name]
-	if !ok {
-		return nil, nil, fmt.Errorf("server %q not found", name)
-	}
-	server, ok := rawServer.(map[string]any)
-	if !ok {
-		return nil, nil, fmt.Errorf("server %q has unsupported config shape", name)
+	server, err := locateServerConfig(rawServers, name)
+	if err != nil {
+		return nil, nil, err
 	}
 	rawOAuth, ok := server["oauth"]
 	if !ok || rawOAuth == nil {
@@ -162,6 +154,35 @@ func locateOAuth(doc map[string]any, name string) (map[string]any, map[string]an
 		return nil, nil, fmt.Errorf("server %q OAuth config has unsupported shape", name)
 	}
 	return server, oauth, nil
+}
+
+func locateServerConfig(rawServers any, name string) (map[string]any, error) {
+	switch servers := rawServers.(type) {
+	case map[string]any:
+		rawServer, ok := servers[name]
+		if !ok {
+			return nil, fmt.Errorf("server %q not found", name)
+		}
+		server, ok := rawServer.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("server %q has unsupported config shape", name)
+		}
+		return server, nil
+	case []any:
+		for _, item := range servers {
+			server, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			serverName, _ := server["name"].(string)
+			if strings.TrimSpace(serverName) == name {
+				return server, nil
+			}
+		}
+		return nil, fmt.Errorf("server %q not found", name)
+	default:
+		return nil, errors.New("MCPProxy mcpServers has unsupported shape")
+	}
 }
 
 func normalizeScopes(v any) []string {
