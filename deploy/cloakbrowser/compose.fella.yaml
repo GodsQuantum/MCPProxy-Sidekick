@@ -1,0 +1,50 @@
+name: cloakbrowser-fella
+
+services:
+  cloakbrowser-manager-fella:
+    init: true
+    image: cloakhq/cloakbrowser-manager@sha256:eaa08b54f7d30f3512e1f8faa1e457fe340e868af9f76b5f6bad282b3bd7ae2d
+    container_name: cloakbrowser-manager-fella
+    restart: unless-stopped
+    environment:
+      CLOAKBROWSER_RELEASE_CHANNEL: stable
+      TZ: Europe/Paris
+    volumes:
+      - /srv/lxc/ia-studio/appdata/cloakbrowser-manager-fella:/data
+      - /srv/lxc/ia-studio/appdata/cloakbrowser-manager-fella/cloak-cache:/root/.cloakbrowser
+      - /srv/lxc/ia-studio/appdata/cloakbrowser-manager/windows-fonts:/usr/local/share/fonts/windows:ro
+    ports:
+      - "127.0.0.1:18089:8080"
+    networks:
+      - services
+    shm_size: 1gb
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+    group_add:
+      - "991"
+    mem_limit: 3g
+    mem_reservation: 256m
+    memswap_limit: 3g
+    pids_limit: 1024
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  services:
+    external: true
+    name: ct400-services
