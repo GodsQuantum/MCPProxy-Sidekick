@@ -143,3 +143,35 @@ func TestEnsureRedirectURIAppliesAndIsIdempotent(t *testing.T) {
 		t.Fatalf("idempotent changed=%v err=%v", changed, err)
 	}
 }
+
+func listConfigFixture() map[string]any {
+	return map[string]any{
+		"mcpServers": []any{
+			map[string]any{
+				"name": "google",
+				"url":  "http://example.invalid/mcp",
+				"oauth": map[string]any{
+					"scopes": []any{"drive"},
+				},
+			},
+		},
+	}
+}
+
+func TestEnsureRedirectURISupportsListServerShape(t *testing.T) {
+	b := &fakeBackend{doc: listConfigFixture()}
+	s := Service{Backend: b}
+	changed, err := s.EnsureRedirectURI(context.Background(), "google", "http://127.0.0.1:54108/oauth/callback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected redirect URI change")
+	}
+	servers := b.doc["mcpServers"].([]any)
+	server := servers[0].(map[string]any)
+	oauth := server["oauth"].(map[string]any)
+	if oauth["redirect_uri"] != "http://127.0.0.1:54108/oauth/callback" {
+		t.Fatalf("redirect_uri=%v", oauth["redirect_uri"])
+	}
+}
