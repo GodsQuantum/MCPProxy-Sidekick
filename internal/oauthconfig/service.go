@@ -29,6 +29,47 @@ type Diff struct {
 
 type Result = Diff
 
+func (s Service) EnsureRedirectURI(ctx context.Context, server, desired string) (bool, error) {
+	if s.Backend == nil {
+		return false, errors.New("OAuth config backend is not configured")
+	}
+	desired = strings.TrimSpace(desired)
+	if desired == "" {
+		return false, errors.New("OAuth redirect URI is required")
+	}
+	doc, err := s.Backend.GetConfig(ctx)
+	if err != nil {
+		return false, err
+	}
+	_, oauth, err := locateOAuth(doc, server)
+	if err != nil {
+		return false, err
+	}
+	if current, _ := oauth["redirect_uri"].(string); strings.TrimSpace(current) == desired {
+		return false, nil
+	}
+	oauth["redirect_uri"] = desired
+	if err := s.Backend.ValidateConfig(ctx, doc); err != nil {
+		return false, fmt.Errorf("validate OAuth redirect URI: %w", err)
+	}
+	if err := s.Backend.ApplyConfig(ctx, doc); err != nil {
+		return false, fmt.Errorf("apply OAuth redirect URI: %w", err)
+	}
+	verified, err := s.Backend.GetConfig(ctx)
+	if err != nil {
+		return false, fmt.Errorf("verify OAuth redirect URI: %w", err)
+	}
+	_, gotOAuth, err := locateOAuth(verified, server)
+	if err != nil {
+		return false, fmt.Errorf("verify OAuth redirect URI: %w", err)
+	}
+	got, _ := gotOAuth["redirect_uri"].(string)
+	if strings.TrimSpace(got) != desired {
+		return false, fmt.Errorf("verify OAuth redirect URI: got %q", got)
+	}
+	return true, nil
+}
+
 func (s Service) Current(ctx context.Context, server string) ([]string, error) {
 	if s.Backend == nil {
 		return nil, errors.New("OAuth config backend is not configured")

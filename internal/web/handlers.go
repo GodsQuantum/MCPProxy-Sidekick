@@ -374,6 +374,12 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "missing server name")
 		return
 	}
+	if redirectURI := strings.TrimSpace(s.Cfg.OAuthRedirects[name]); redirectURI != "" {
+		if _, err := (oauthconfig.Service{Backend: s.Proxy}).EnsureRedirectURI(r.Context(), name, redirectURI); err != nil {
+			writeError(w, http.StatusBadGateway, "prepare OAuth callback: "+err.Error())
+			return
+		}
+	}
 	instance, err := s.ensureActiveBrowser(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
