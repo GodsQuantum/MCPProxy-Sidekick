@@ -47,8 +47,18 @@ takes precedence over this guide.
 - Source Fella profile filesystem was migrated from its previously stopped
   old-manager profile, checksum comparison 0 differences. Original was left
   in place for rollback and must remain stopped; no data deleted.
-- No full CT400/host restart or HTTPS/SSO Fella human clipboard test was
-  performed as part of this activation.
+- Follow-up smoke 2026-10-09 00:40 CEST: BOTH direct KasmVNC WebSocket
+  connections succeeded (binary subprotocol); clipboard POST + GET text
+  round-trip matched on BOTH live browsers and original clipboard text was
+  restored and verified. BOTH MCPProxy real read-only calls returned
+  isError=false. MCP profile discovery/isolation smoke: 9/9 PASS.
+- Browser Arezki Pangolin HTTPS correctly returns 401 anonymously.
+  browser-fella.arezkichougar.com is still 404 (no Pangolin resource); an
+  experimental native Caddy route was validated, but fully ROLLED BACK
+  after Pangolin resource creation was blocked. Direct Fella Manager access
+  remains localhost-only via SSH tunnel. Never claim Fella HTTPS is live.
+- No full CT400/host restart or human clipboard action through Pangolin
+  HTTPS/SSO was performed; neither is proven end-to-end.
 
 ## Future maintenance
 
