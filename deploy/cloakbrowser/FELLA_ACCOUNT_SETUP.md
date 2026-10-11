@@ -3,6 +3,15 @@
 Operational state verified 2026-10-08 23:40+ CEST. Current live state always
 takes precedence over this guide.
 
+## Mise en production HTTPS — 12 octobre 2026
+
+- **URL Fella : `https://browser-fella.arezkichougar.com/` (ACTIVE).**
+- Ressource Pangolin HTTP **49**, domaine `browser-fella.arezkichougar.com`, `enabled=true`, `sso=true`, `blockAccess=false`; règle d'accès **rôle Admin (id=1) uniquement**, identique à Arezki.
+- Target Pangolin : site **Cloud 9 (2)** vers `192.168.1.218:18080` en HTTP. Le proxy Caddy `mcpproxy-gateway` sur CT400 fait le routage `Host: browser-fella.arezkichougar.com` vers `cloakbrowser-manager-fella:8080` par Docker network `ct400-services`.
+- **Le port Docker Fella reste à `127.0.0.1:18089:8080`** ; aucun port de Manager Fella ouvert au LAN. Aucune modification de montage ou de profil.
+- Tests réalisés : Caddy `validate` puis `reload` OK ; `/api/health` et `/api/profiles` via Caddy HTTP 200 ; handshake WebSocket CDP via Caddy OK ; HTTPS public retourne **401 anonyme (SSO)**, comme browser Arezki ; le raccourci `/control/browser/fella` redirige vers le nouveau domaine.
+- L'ouverture de Google sous l'identité Fella et un vrai parcours humain Pangolin SSO restent à effectuer ; ne jamais prétendre que les cookies Google ont déjà été renouvelés. L'historique du 9 octobre ci-dessous décrit l'état **antérieur** à cette publication.
+
 ## Runtime and access
 
 - Arezki manager: cloakbrowser-manager, own Free key, own browser profile.
