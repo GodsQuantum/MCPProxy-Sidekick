@@ -3,6 +3,15 @@
 Operational state verified 2026-10-08 23:40+ CEST. Current live state always
 takes precedence over this guide.
 
+## Mise en production HTTPS — 12 octobre 2026
+
+- **URL profile-owner : `https://browser-profile-owner.example.com/` (ACTIVE).**
+- Ressource Pangolin HTTP **49**, domaine `browser-profile-owner.example.com`, `enabled=true`, `sso=true`, `blockAccess=false`; règle d'accès **rôle Admin (id=1) uniquement**, identique à developer.
+- Target Pangolin : site **Cloud 9 (2)** vers `192.0.2.42:18080` en HTTP. Le proxy Caddy `mcpproxy-gateway` sur CT400 fait le routage `Host: browser-profile-owner.example.com` vers `cloakbrowser-manager-profile-owner:8080` par Docker network `ct400-services`.
+- **Le port Docker profile-owner reste à `127.0.0.1:18089:8080`** ; aucun port de Manager profile-owner ouvert au LAN. Aucune modification de montage ou de profil.
+- Tests réalisés : Caddy `validate` puis `reload` OK ; `/api/health` et `/api/profiles` via Caddy HTTP 200 ; handshake WebSocket CDP via Caddy OK ; HTTPS public retourne **401 anonyme (SSO)**, comme browser developer ; le raccourci `/control/browser/profile-owner` redirige vers le nouveau domaine.
+- L'ouverture de Google sous l'identité profile-owner et un vrai parcours humain Pangolin SSO restent à effectuer ; ne jamais prétendre que les cookies Google ont déjà été renouvelés. L'historique du 9 octobre ci-dessous décrit l'état **antérieur** à cette publication.
+
 ## Runtime and access
 
 - developer manager: cloakbrowser-manager, own Free key, own browser profile.
