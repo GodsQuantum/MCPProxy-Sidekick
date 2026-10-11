@@ -5,10 +5,19 @@ services:
     init: true
     image: cloakhq/cloakbrowser-manager@sha256:eaa08b54f7d30f3512e1f8faa1e457fe340e868af9f76b5f6bad282b3bd7ae2d
     container_name: cloakbrowser-manager-fella
+    # CloakBrowser-Manager #51: Uvicorn VNC WS timeout 20 -> 120s.
+    # Keep the original upstream entrypoint cleanup and avoid new bind mounts.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >-
+        sed 's/--log-level warning$/--log-level warning --ws-ping-interval 20 --ws-ping-timeout 120/' /entrypoint.sh > /tmp/entrypoint-ws.sh && exec /bin/bash /tmp/entrypoint-ws.sh
     restart: unless-stopped
     environment:
       CLOAKBROWSER_RELEASE_CHANNEL: stable
       TZ: Europe/Paris
+      # Chromium Linux UI locale (profile/navigator locale fr-FR alone is insufficient).
+      LANGUAGE: fr
     volumes:
       - /srv/lxc/ia-studio/appdata/cloakbrowser-manager-fella:/data
       - /srv/lxc/ia-studio/appdata/cloakbrowser-manager-fella/cloak-cache:/root/.cloakbrowser
