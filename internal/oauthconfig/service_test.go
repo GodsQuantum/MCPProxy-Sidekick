@@ -201,7 +201,7 @@ func TestEnsureCallbackBaseURLSupportsListAndRejectsUnsafeOrigins(t *testing.T) 
 	for _, input := range []string{
 		"http://mcp.example.com",
 		"https://mcp.example.com/control/",
-		"https://user:pass@mcp.example.com",
+		"https://user:pass@example.com",
 		"https://mcp.example.com?test=1",
 		"https://mcp.example.com/#fragment",
 		"javascript:alert(1)",

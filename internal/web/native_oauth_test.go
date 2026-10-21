@@ -7,18 +7,18 @@ import (
 )
 
 func TestNativeOAuthPageURL(t *testing.T) {
-	got, err := nativeOAuthPageURL("https://mcp.example.org/control/", "moneymatter-fella-oauth")
+	got, err := nativeOAuthPageURL("https://mcp.example.org/control/", "finance-secondary-oauth")
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "https://mcp.example.org/ui/servers/moneymatter-fella-oauth"
+	const want = "https://mcp.example.org/ui/servers/finance-secondary-oauth"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
 
 func TestNativeOAuthPageURLRejectsInvalidOriginsAndServers(t *testing.T) {
-	for _, s := range []string{"http://mcp.example.org/control/", "javascript:alert(1)", "https://name:password@mcp.example.org/control/", "https://mcp.example.org/control/?token=secret"} {
+	for _, s := range []string{"http://mcp.example.org/control/", "javascript:alert(1)", "https://name:password@example.org/control/", "https://mcp.example.org/control/?token=secret"} {
 		if _, err := nativeOAuthPageURL(s, "foo"); err == nil {
 			t.Errorf("unsafe origin accepted: %q", s)
 		}
