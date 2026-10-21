@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +22,7 @@ func (fakeStarter) StartOAuth(context.Context, string) (mcpproxy.OAuthStart, err
 	return mcpproxy.OAuthStart{AuthURL: "https://provider.example/authorize?x=1"}, nil
 }
 
-func TestBrowserOpenClearsStaleTabsBeforeCDPNewTab(t *testing.T) {
+func TestBrowserOpenPreservesUnownedTabsBeforeCDPNewTab(t *testing.T) {
 	var closed, opened, openedBeforeClose bool
 	var listClose, closeClose, newClose bool
 	var rawQuery string
@@ -59,14 +60,14 @@ func TestBrowserOpenClearsStaleTabsBeforeCDPNewTab(t *testing.T) {
 	if err := b.Open(context.Background(), "https://provider.example/authorize?x=1"); err != nil {
 		t.Fatal(err)
 	}
-	if !closed || !opened {
-		t.Fatalf("closed=%v opened=%v", closed, opened)
+	if closed || !opened {
+		t.Fatalf("unexpected close=%v opened=%v", closed, opened)
 	}
-	if openedBeforeClose {
-		t.Fatal("new OAuth tab opened before stale tab was closed")
+	if !openedBeforeClose {
+		t.Fatal("opening OAuth tab must not close unrelated human tabs")
 	}
-	if !listClose || !closeClose || !newClose {
-		t.Fatalf("CDP requests must disable keep-alive: list=%v close=%v new=%v", listClose, closeClose, newClose)
+	if listClose || closeClose || !newClose {
+		t.Fatalf("must not enumerate/close human tabs: list=%v close=%v new=%v", listClose, closeClose, newClose)
 	}
 	if !strings.Contains(rawQuery, "https%3A%2F%2Fprovider.example%2Fauthorize") {
 		t.Fatalf("query = %q", rawQuery)
@@ -210,5 +211,42 @@ func TestBrowserOpenFallsBackToCDPWebSocket(t *testing.T) {
 	}
 	if !created {
 		t.Fatal("Target.createTarget fallback was not used")
+	}
+}
+
+// Successive Sidekick OAuth flows replace only a tab created by the prior
+// Sidekick request. A person's existing browser tabs are never enumerated or closed.
+func TestBrowserOpenReclaimsOnlyItsOwnPreviousTab(t *testing.T) {
+	opened := 0
+	var closed []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/json/new":
+			opened++
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": fmt.Sprintf("sidekick-%d", opened)})
+		case strings.HasPrefix(r.URL.Path, "/json/close/"):
+			closed = append(closed, strings.TrimPrefix(r.URL.Path, "/json/close/"))
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/json/list":
+			t.Error("must not scan or alter user's other tabs")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	b := Browser{CDPBaseURL: srv.URL, PublicSessionURL: "/oauth-browser/"}
+	for i := 0; i < 3; i++ {
+		if err := b.Open(context.Background(), "https://accounts.example/authorize"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"sidekick-1", "sidekick-2"}
+	if opened != 3 || len(closed) != len(want) {
+		t.Fatalf("opened=%d closed=%v want=%v", opened, closed, want)
+	}
+	for i := range want {
+		if closed[i] != want[i] {
+			t.Fatalf("closed tab %d=%s want=%s", i, closed[i], want[i])
+		}
 	}
 }

@@ -19,9 +19,11 @@ Supported providers:
 
 Both providers use Selkies for the visible browser and private CDP on loopback.
 
-When the Human Auth Browser is a separate service/network namespace, prefer a stable OAuth loopback callback plus a narrowly scoped TCP relay instead of rewriting provider callback URLs. `SIDEKICK_OAUTH_REDIRECTS_JSON` maps upstream names to fixed loopback callbacks. Sidekick applies the configured redirect through MCPProxy only when a reconnect is explicitly started; the browser-side relay then forwards that loopback port to the MCPProxy namespace. Keep relay ports internal to the Docker network and do not publish them on the LAN.
+For supported MCPProxy Server releases, prefer the native `oauth.callback_base_url` HTTPS origin. Configure `/ui/` and `/oauth/callback/<server-name>` to reach the same protected MCPProxy listener. Sidekick opens the native MCPProxy server detail page in the operator's current browser or selected persistent browser. It does not preflight-rewrite `oauth.redirect_uri` or the full MCPProxy config when starting normal OAuth. The identity provider's actual consent must be completed by the authorized human.
 
-A deployment may declare multiple persistent browser instances (for example separate primary/secondary profiles) and reuse them for both Playwright automation and human OAuth. When those browsers share `network_mode: container:<mcpproxy>`, assign each instance distinct GUI, Selkies control, browser CDP and optional CDP-relay ports. The provider OAuth callback to `127.0.0.1:<dynamic-port>` then reaches MCPProxy naturally because the browser and MCPProxy share the same loopback. Add every shared-netns browser container to `MCPPROXY_SIDECARS` so the namespace guard rebinds it after an MCPProxy restart.
+A CDP relay is needed only for remote **browser automation** when a separate browser network namespace exposes its Chrome DevTools endpoint on loopback. It is not an OAuth callback relay. Keep CDP private and authenticated; never publish it to the LAN. A deployment may declare independent persistent browser instances (including separate CloakBrowser Managers for separate users), but browser profiles, cookies, tokens and sessions must not be mixed. Only Sidekick-created temporary tabs may be closed by Sidekick.
+
+Legacy sidecars sharing MCPProxy's network namespace must have their shared-netns references maintained after MCPProxy reconnects. Prefer native HTTPS OAuth over dynamic loopback relay for new deployments.
 
 Example Brave settings:
 
@@ -143,3 +145,11 @@ The guard:
 - does not require the Docker socket inside Sidekick itself.
 
 Install the helper on a Docker host only when shared-container networking is used. Override `MCPPROXY_SIDECARS` in the systemd unit for local container names.
+
+## Connection workflows and offline workstations (October 2026)
+
+- **OAuth in the user's browser:** choose **Connexion OAuth** from the connection card. Sidekick opens the native MCPProxy server page on the same HTTPS origin in the currently used browser. **Copy link** copies the native URL for deliberate handoff to the account owner. MCPProxy handles PKCE, callback and token refresh.
+- **API keys:** **Set credential** offers an explicitly clicked **Paste from clipboard** button and temporary **Show / hide** controls. Sidekick never automatically submits clipboard contents.
+- **Profiles:** **New profile** allows selecting multiple upstreams and assigns them through MCPProxy's native profile APIs. If an assignment fails, it reports partial success and preserves the profile for correction.
+- **Workstation availability:** Obsidian upstreams without a running desktop client appear as *expected offline* in Sidekick. Native MCPProxy status is not altered.
+- **Quarantine:** trust and tool review remain enforced exclusively by MCPProxy; Sidekick cannot independently approve tools or override global security policy.

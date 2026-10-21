@@ -368,46 +368,59 @@ func (s *Server) handleOmniRouteRestoreMaster(w http.ResponseWriter, r *http.Req
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
+// nativeOAuthPageURL delegates identity, account selection, PKCE, state and
+// token management to the upstream MCPProxy Web UI. No API keys are placed in
+// URLs. A Sidekick mount such as /control/ shares a public origin with /ui/.
+func nativeOAuthPageURL(publicBaseURL, server string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(publicBaseURL))
+	if err != nil || u == nil || u.Scheme != "https" || u.Hostname() == "" ||
+		u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("configure an HTTPS public origin for MCPProxy")
+	}
+	if strings.TrimSpace(server) == "" || (len(server) > 128 || strings.Trim(server, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-") != "") || server == "." || server == ".." {
+		return "", fmt.Errorf("invalid MCP server name")
+	}
+	return u.Scheme + "://" + u.Host + "/ui/servers/" + url.PathEscape(server), nil
+}
+
+// Standard upstream login is driven by MCPProxy's native server-detail UI.
+// Sidekick only opens that safe public page in the chosen CloakBrowser; it never
+// overwrites the server's complete OAuth/config document or secrets on click.
 func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
-		writeError(w, 400, "missing server name")
+		writeError(w, http.StatusBadRequest, "missing server name")
 		return
-	}
-	if redirectURI := strings.TrimSpace(s.Cfg.OAuthRedirects[name]); redirectURI != "" {
-		if _, err := (oauthconfig.Service{Backend: s.Proxy}).EnsureRedirectURI(r.Context(), name, redirectURI); err != nil {
-			writeError(w, http.StatusBadGateway, "prepare OAuth callback: "+err.Error())
-			return
-		}
 	}
 	instance, err := s.ensureActiveBrowser(r.Context())
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeError(w, http.StatusBadGateway, "selected browser unavailable: "+err.Error())
 		return
 	}
 	browser := oauth.Browser{CDPBaseURL: instance.CDPURL, PublicSessionURL: instance.BrowserURL}
 	if strings.TrimSpace(s.Cfg.YouTubeOAuthControlURL) != "" && youtubeoauthadapter.MatchesServer(name) {
 		start, err := (youtubeoauthadapter.Adapter{BaseURL: s.Cfg.YouTubeOAuthControlURL}).Start(r.Context())
 		if err != nil {
-			writeError(w, 502, err.Error())
+			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		if err := browser.Open(r.Context(), start.AuthURL); err != nil {
-			writeError(w, 502, err.Error())
+			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		writeJSON(w, 200, map[string]any{"browser_url": browser.SessionURL(), "provider": "youtube", "profile": "full"})
+		writeJSON(w, http.StatusOK, map[string]any{"browser_url": browser.SessionURL(), "provider": "youtube", "profile": "full"})
 		return
 	}
-	result, err := s.OAuth.StartWithBrowser(r.Context(), name, browser)
+	native, err := nativeOAuthPageURL(s.Cfg.PublicBaseURL, name)
 	if err != nil {
-		// Error text contains only the failed stage/status; auth URLs and tokens
-		// are deliberately never logged.
-		log.Printf("sidekick oauth reconnect failed server=%s: %v", name, err)
-		writeError(w, 502, err.Error())
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	writeJSON(w, 200, result)
+	if err := browser.Open(r.Context(), native); err != nil {
+		writeError(w, http.StatusBadGateway, "could not open MCPProxy native login in selected browser: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"browser_url": browser.SessionURL(), "native_url": native, "provider": "mcpproxy-native"})
 }
 
 func (s *Server) profileV3Available(ctx context.Context) bool {

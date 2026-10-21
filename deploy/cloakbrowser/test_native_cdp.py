@@ -20,12 +20,12 @@ class TestCloakAgentBrowserNativeCDP(unittest.TestCase):
             os, "execvpe", side_effect=capture
         ), patch.object(
             sys, "argv",
-            ["wrapper", "--profile-id", "mock", "--session", "cloak-fella", "--namespace", "fella"],
+            ["wrapper", "--profile-id", "mock", "--session", "cloak-secondary", "--namespace", "secondary"],
         ):
             self.assertEqual(main(), 0)
         self.assertEqual(passed["env"]["AGENT_BROWSER_CDP"], "ws://example.invalid/devtools/browser/mock")
-        self.assertEqual(passed["env"]["AGENT_BROWSER_SESSION"], "cloak-fella")
-        self.assertEqual(passed["env"]["AGENT_BROWSER_NAMESPACE"], "fella")
+        self.assertEqual(passed["env"]["AGENT_BROWSER_SESSION"], "cloak-secondary")
+        self.assertEqual(passed["env"]["AGENT_BROWSER_NAMESPACE"], "secondary")
         self.assertEqual(passed["argv"][-3:], ["mcp", "--tools", "core,network,state,tabs"])
 
 if __name__ == "__main__":

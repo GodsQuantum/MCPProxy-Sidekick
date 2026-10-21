@@ -223,14 +223,19 @@ function renderProfiles(){
   $$(".delete-profile").forEach(b=>b.onclick=()=>deleteProfile(b.dataset.profile));
 }
 
+function isExpectedOffline(c){
+  return /^obsidian-[a-z0-9_-]+$/.test(String(c?.name||"")) && !c.ready;
+}
+
 function connectionCard(c){
   const memberships=(c.profiles||[]).join(", ")||"Unassigned";
+  const offline=isExpectedOffline(c);
   const auth=c.oauth?"OAuth":(c.credential_configured?"API credential":"No auth detected");
   let quick=c.oauth
-    ?'<button class="secondary oauth-start" data-name="'+esc(c.name)+'">'+(c.authenticated?"Reconnect OAuth":"Connect OAuth")+'</button>'
+    ?'<button class="secondary oauth-native" data-name="'+esc(c.name)+'">'+(c.authenticated?"Reconnexion OAuth":"Connexion OAuth")+'</button><button class="ghost oauth-copy" data-name="'+esc(c.name)+'" title="Copy MCPProxy native sign-in URL">Copy link</button><button class="secondary oauth-start" data-name="'+esc(c.name)+'">CloakBrowser</button>'
     :'<button class="secondary credential-open" data-name="'+esc(c.name)+'">Set credential</button>';
   return '<article class="server-card connection-card" data-name="'+esc(c.name)+'">'+
-    '<div class="server-top"><div><h3>'+esc(c.name)+'</h3><span class="muted">'+esc(memberships)+'</span></div>'+badge(c.status,c.enabled,c.quarantined)+'</div>'+
+    '<div class="server-top"><div><h3>'+esc(c.name)+'</h3><span class="muted">'+esc(memberships)+'</span></div>'+(offline?'<span class="badge">Expected offline</span>':badge(c.status,c.enabled,c.quarantined))+'</div>'+
     '<div class="server-meta"><span>'+esc(auth)+' · '+esc(c.protocol||"MCP")+'</span><strong>'+esc(c.tool_count||0)+' tools</strong></div>'+
     '<div class="preview">'+esc(c.credential_preview||(c.oauth?(c.authenticated?"OAuth connected":"OAuth not connected"):"Credential not configured"))+'</div>'+
     '<div class="card-actions"><button class="primary connection-open" data-name="'+esc(c.name)+'">Open</button>'+quick+'</div></article>';
@@ -239,10 +244,21 @@ function connectionCard(c){
 function renderConnections(){
   const root=$("#connections-list"); if(!root)return;
   const q=($("#connection-search")?.value||"").toLowerCase();
-  const list=(state.connections||[]).filter(c=>!q||c.name.toLowerCase().includes(q)||String(c.status).toLowerCase().includes(q)||(c.profiles||[]).join(" ").toLowerCase().includes(q));
+  const filter=$("#connection-filter")?.value||"all";
+  const list=(state.connections||[]).filter(c=>{
+    const matches=!q||c.name.toLowerCase().includes(q)||String(c.status).toLowerCase().includes(q)||(c.profiles||[]).join(" ").toLowerCase().includes(q);
+    if(!matches)return false;
+    if(filter==="ready")return !!c.ready;
+    if(filter==="offline")return isExpectedOffline(c);
+    if(filter==="signin")return !!c.oauth&&!c.authenticated;
+    if(filter==="attention")return !isExpectedOffline(c)&&(!c.ready||!c.enabled||c.quarantined);
+    return true;
+  });
   root.innerHTML=list.length?list.map(connectionCard).join(""):'<div class="empty">No matching connections.</div>';
   $$(".connection-open",root).forEach(b=>b.onclick=()=>openConnection(b.dataset.name,b));
   $$(".oauth-start",root).forEach(b=>b.onclick=()=>startOAuth(b.dataset.name));
+  $$(".oauth-native",root).forEach(b=>b.onclick=()=>openNativeOAuth(b.dataset.name));
+  $$(".oauth-copy",root).forEach(b=>b.onclick=()=>copyNativeOAuth(b.dataset.name));
   $$(".credential-open",root).forEach(b=>b.onclick=()=>openCredential(b.dataset.name,b));
 }
 
@@ -252,7 +268,7 @@ async function openConnection(name,opener){
     const profiles=(c.profiles||[]).map(x=>'<span class="chip">'+esc(x)+'</span>').join("")||'<span class="muted">Unassigned</span>';
     const scopes=(c.oauth_scopes||[]).join("\n");
     const actions=(c.actions||[]).filter(x=>x!=="reconnect").map(a=>'<button type="button" class="secondary connection-action" data-action="'+esc(a)+'">'+esc(titleCase(a))+'</button>').join("");
-    const oauth=c.oauth?'<section class="connection-section"><h3>OAuth scopes</h3><label for="scope-input">Configured scopes<textarea id="scope-input" rows="6">'+esc(scopes)+'</textarea></label><div id="scope-preview" class="muted" role="status" aria-live="polite">One scope per line.</div><div class="card-actions"><button type="button" class="secondary" id="scope-preview-btn">Preview changes</button><button type="button" class="primary" id="scope-apply-btn">Apply scopes</button><button type="button" class="secondary oauth-start" data-name="'+esc(c.name)+'">Reconnect OAuth</button></div></section>':"";
+    const oauth=c.oauth?'<section class="connection-section"><h3>OAuth scopes</h3><label for="scope-input">Configured scopes<textarea id="scope-input" rows="6">'+esc(scopes)+'</textarea></label><div id="scope-preview" class="muted" role="status" aria-live="polite">One scope per line.</div><div class="card-actions"><button type="button" class="secondary" id="scope-preview-btn">Preview changes</button><button type="button" class="primary" id="scope-apply-btn">Apply scopes</button><button type="button" class="secondary oauth-native" data-name="'+esc(c.name)+'">Connexion dans ce navigateur</button><button type="button" class="secondary oauth-start" data-name="'+esc(c.name)+'">Via CloakBrowser</button></div></section>':"";
     openModal(
       '<h2 id="modal-title">'+esc(c.name)+'</h2>'+
       '<div class="connection-hero"><div>'+badge(c.status,c.enabled,c.quarantined)+'</div><strong>'+esc(c.tool_count||0)+' tools</strong></div>'+
@@ -263,6 +279,7 @@ async function openConnection(name,opener){
       opener
     );
     $$(".oauth-start",$("#modal")).forEach(b=>b.onclick=()=>startOAuth(b.dataset.name));
+    $$(".oauth-native",$("#modal")).forEach(b=>b.onclick=()=>openNativeOAuth(b.dataset.name));
     $$(".credential-open",$("#modal")).forEach(b=>b.onclick=()=>openCredential(b.dataset.name,b));
     $$(".connection-action",$("#modal")).forEach(b=>b.onclick=()=>connectionAction(c.name,b.dataset.action));
     if(c.oauth){
@@ -305,10 +322,12 @@ async function connectionAction(name,action){
 
 function renderAttention(){
   const warnings=state.data?.warnings||[];
-  const list=(state.connections||[]).filter(s=>!s.enabled||s.quarantined||!s.ready);
+  const list=(state.connections||[]).filter(s=>!isExpectedOffline(s)&&(!s.enabled||s.quarantined||!s.ready));
+  const expectedOffline=(state.connections||[]).filter(isExpectedOffline).length;
   const warningHtml=warnings.map(w=>'<div class="token-row"><div class="token-info"><h3>Sidekick dependency</h3><p>'+esc(w)+'</p></div><span class="badge warn">Degraded</span></div>').join("");
   const connectionHtml=list.map(s=>'<div class="token-row"><div class="token-info"><h3>'+esc(s.name)+'</h3><p>'+esc(s.status||"unknown")+' · '+(s.tool_count||0)+' tools</p></div>'+badge(s.status,s.enabled,s.quarantined)+'</div>').join("");
-  const attentionHtml=warningHtml+connectionHtml||'<div class="empty">Everything looks healthy.</div>';
+  const offlineHtml=expectedOffline?'<p class="muted">'+expectedOffline+' Obsidian workstation connection(s) offline as expected. They reconnect when the desktop application starts.</p>':'';
+  const attentionHtml=warningHtml+connectionHtml+offlineHtml||'<div class="empty">Everything looks healthy.</div>';
   if($("#attention"))$("#attention").innerHTML=attentionHtml;
 
   const eventHtml=state.activityEvents.map(ev=>
@@ -359,6 +378,31 @@ async function restoreOmniRouteMaster(){
   }catch(e){toast(e.message)}
 }
 
+// On shared-origin deployments MCPProxy's own authenticated UI handles the
+// OAuth flow, popup, PKCE callback, refresh tokens and server review. No
+// Sidekick backend config rewrite is needed at login time.
+function nativeOAuthURL(name){
+  const target=new URL("/ui/servers/"+encodeURIComponent(name),location.origin);
+  if(target.origin!==location.origin) throw new Error("Unsafe MCPProxy login origin");
+  return target.href;
+}
+async function copyNativeOAuth(name){
+  try{
+    await navigator.clipboard.writeText(nativeOAuthURL(name));
+    toast("MCPProxy sign-in link copied. Open in the browser of the account owner.");
+  }catch{
+    toast("Clipboard unavailable. Use Connexion OAuth to open the link in this browser.");
+  }
+}
+function openNativeOAuth(name){
+  const url=nativeOAuthURL(name);
+  const popup=window.open("about:blank","_blank");
+  if(!popup){toast("Pop-up bloquée : ouvrez "+url);return}
+  try{popup.opener=null}catch{}
+  popup.location=url;
+  toast("MCPProxy : connectez "+name+" avec le compte souhaité.");
+}
+
 async function startOAuth(name){
   const popup=window.open("about:blank","mcp-oauth-"+name);
   if(!popup){ toast("Popup blocked. Allow popups for this site and retry."); return; }
@@ -368,8 +412,15 @@ async function startOAuth(name){
     try{popup.document.body.textContent="Secure browser ready. Opening sign-in…"}catch{}
     popup.location=result.browser_url; popup.focus(); toast("OAuth browser opened for "+name+". Complete sign-in there."); setTimeout(load,2500);
   }catch(e){
-    try{popup.document.body.textContent="OAuth start failed: "+e.message}catch{}
-    toast("OAuth start failed: "+e.message);
+    // Never strand the user on a 502. The native MCPProxy UI remains usable
+    // from the current browser without opening any new managed CDP tabs.
+    try{
+      popup.document.body.textContent="CloakBrowser indisponible. Ouvrir la connexion native : ";
+      const a=popup.document.createElement("a");
+      a.href=nativeOAuthURL(name);a.textContent="MCPProxy OAuth";
+      popup.document.body.append(a);
+    }catch{}
+    toast("CloakBrowser indisponible : utilisez Connexion OAuth dans ce navigateur.");
   }
 }
 
@@ -390,7 +441,22 @@ function openCredential(name,opener){
           : 'Crypto.com Exchange API: use the key and secret generated on exchange.crypto.com. This connection sees only the dedicated Exchange account/order book, separate from the Main App.')+' Sidekick installs the pair into its own 0600 credential file and restarts only this target service. The secret is never stored in Sidekick metadata.</p><label>Crypto.com '+(isCryptoApp?'App Agent':'Exchange')+' API key<input id="cred-value" type="password" autocomplete="off" required></label><label>Crypto.com API secret<input id="cred-secret" type="password" autocomplete="off" required></label><label>Credential lifetime (days)<input id="cred-expiry-days" type="number" min="1" max="365" value="90" required></label>'
       : '<p class="muted">The full secret is submitted once and is not returned by Sidekick afterward.</p><label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label><label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label><label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label>';
   const submitLabel=isOpenAlex?"Save / replace API key (keep disabled)":isCryptoPrivate?"SET credentials":"Save / replace & enable";
-  openModal('<h2 id="modal-title">Credential · '+esc(name)+'</h2><form id="credential-form" class="form-grid">'+authFields+'<button class="primary" type="submit">'+submitLabel+'</button></form>',opener);
+  openModal('<h2 id="modal-title">Credential · '+esc(name)+'</h2><form id="credential-form" class="form-grid">'+authFields+'<div class="card-actions"><button class="secondary" id="credential-paste" type="button">Paste from clipboard</button><button class="ghost" id="credential-toggle-visibility" type="button">Show / hide</button></div><button class="primary" type="submit">'+submitLabel+'</button></form>',opener);
+  $("#credential-paste").onclick=async()=>{
+    try{
+      if(!navigator.clipboard?.readText)throw new Error("Unavailable");
+      const value=await navigator.clipboard.readText();
+      if(!value)throw new Error("Clipboard empty");
+      $("#cred-value").value=value.trim();
+      $("#cred-value").focus();
+      toast("Credential pasted locally. Check it, then save explicitly.");
+    }catch{toast("Clipboard access denied. Use Ctrl+V in the credential field.")}
+  };
+  $("#credential-toggle-visibility").onclick=()=>{
+    const fields=[$("#cred-value"),$("#cred-secret")].filter(Boolean);
+    const type=fields[0].type==="password"?"text":"password";
+    fields.forEach(field=>{field.type=type});
+  };
   if(!isOpenAlex&&!isCryptoPrivate)$("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
   $("#credential-form").onsubmit=async e=>{
     e.preventDefault();
@@ -524,8 +590,41 @@ async function openProfileAdvanced(name,opener){
 }
 
 function openNewProfile(){
-  openModal('<h2 id="modal-title">New MCPProxy profile</h2><p class="muted">Native profile URL: /mcp/p/&lt;name&gt;. Use lowercase letters, digits, - or _.</p><form id="profile-form" class="form-grid"><label>Name<input id="profile-name" pattern="[a-z0-9][a-z0-9_-]{0,62}" required placeholder="coding"></label><button class="primary" type="submit">Create profile</button></form>');
-  $("#profile-form").onsubmit=async e=>{e.preventDefault();try{await api("/api/profiles",{method:"POST",body:JSON.stringify({name:$("#profile-name").value.trim()})});closeModal();toast("Profile created in MCPProxy");await load()}catch(err){toast(err.message)}};
+  const choices=(state.data?.upstreams||[]).filter(x=>x.enabled!==false).sort((a,b)=>a.name.localeCompare(b.name)).map(x=>
+    '<label class="check-row"><input type="checkbox" class="profile-new-server" value="'+esc(x.name)+'"> '+esc(x.name)+'</label>'
+  ).join("");
+  openModal(
+    '<h2 id="modal-title">New MCPProxy profile</h2>'+
+    '<p class="muted">Create a scoped native MCPProxy profile and optionally assign its connections in one step. Nothing is shared with other profiles automatically.</p>'+
+    '<form id="profile-form" class="form-grid">'+
+    '<label>Name<input id="profile-name" pattern="[a-z0-9][a-z0-9_-]{0,62}" maxlength="63" required placeholder="research-read"></label>'+
+    '<fieldset class="profile-server-picker"><legend>Connections (optional)</legend><div class="card-actions"><button type="button" id="profile-select-none" class="ghost">Clear selection</button></div><div class="profile-server-options">'+(choices||'<p class="muted">No connections are available.</p>')+'</div></fieldset>'+
+    '<button class="primary" id="profile-create-submit" type="submit">Create profile and assign</button></form>'
+  );
+  $("#profile-select-none").onclick=()=>$$(".profile-new-server").forEach(x=>{x.checked=false});
+  $("#profile-form").onsubmit=async e=>{
+    e.preventDefault();
+    const name=$("#profile-name").value.trim();
+    const servers=$$(".profile-new-server:checked").map(x=>x.value);
+    const button=$("#profile-create-submit");button.disabled=true;
+    try{
+      await api("/api/profiles",{method:"POST",body:JSON.stringify({name})});
+      let assigned=0;
+      for(const server of servers){
+        try{
+          await api("/api/profiles/"+encodeURIComponent(name)+"/servers",{method:"POST",body:JSON.stringify({server})});
+          assigned++;
+        }catch(err){
+          closeModal();
+          toast("Profile created, but only "+assigned+"/"+servers.length+" connections assigned. Reopen it to finish: "+err.message);
+          await load();
+          return;
+        }
+      }
+      closeModal();toast("Profile "+name+" created with "+assigned+" connection(s)");await load();
+    }catch(err){toast(err.message)}
+    finally{if(button.isConnected)button.disabled=false}
+  };
 }
 function openAssign(profile,opener){
   const p=(state.data?.profiles||[]).find(x=>x.name===profile);
@@ -593,6 +692,7 @@ $("#logout").onclick=async()=>{
 };
 $("#refresh").onclick=()=>load({allowEventStart:true});
 $("#connection-search").oninput=renderConnections;
+$("#connection-filter").onchange=renderConnections;
 $("#new-profile").onclick=openNewProfile;
 $("#new-token").onclick=openToken;
 $(".modal-close").onclick=closeModal;
