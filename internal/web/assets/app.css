@@ -122,3 +122,13 @@ textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 65%,tra
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 .panel pre{overflow:auto;background:#080b10;color:#d7e5f7;border:1px solid var(--line);border-radius:13px;padding:14px}
 @media(max-width:860px){.settings-grid,.detail-grid{grid-template-columns:1fr}}
+
+/* Fast connection triage and guided profile creation */
+.connection-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+.connection-controls label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600}
+.connection-controls select{min-width:150px}
+.profile-server-picker{border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px;min-width:0}
+.profile-server-picker legend{font-weight:700;padding:0 6px}
+.profile-server-options{max-height:220px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:5px 12px;margin-top:8px}
+.profile-server-options .check-row{font-size:13px;font-weight:500;overflow-wrap:anywhere}
+@media(max-width:680px){.connection-controls{width:100%}.connection-controls label,.connection-controls input{width:100%}.profile-server-options{grid-template-columns:1fr}}

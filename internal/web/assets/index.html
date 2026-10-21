@@ -71,7 +71,7 @@
       <section id="view-connections" class="view" aria-labelledby="view-title">
         <div class="section-head">
           <div><h2>Connections</h2><p>Auth, credentials, tools and agent access in one place.</p></div>
-          <input id="connection-search" class="search" type="search" placeholder="Filter connections…" aria-label="Filter connections">
+          <div class="connection-controls"><label for="connection-filter">Status <select id="connection-filter" aria-label="Connection status"><option value="all">All</option><option value="attention">Needs attention</option><option value="signin">Sign-in required</option><option value="ready">Connected</option><option value="offline">Expected offline</option></select></label><input id="connection-search" class="search" type="search" placeholder="Search name, status or profile…" aria-label="Filter connections"></div>
         </div>
         <div id="connections-list" class="server-grid"></div>
       </section>

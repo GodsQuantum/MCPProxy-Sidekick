@@ -145,3 +145,11 @@ The guard:
 - does not require the Docker socket inside Sidekick itself.
 
 Install the helper on a Docker host only when shared-container networking is used. Override `MCPPROXY_SIDECARS` in the systemd unit for local container names.
+
+## Connection workflows and offline workstations (October 2026)
+
+- **OAuth in the user's browser:** choose **Connexion OAuth** from the connection card. Sidekick opens the native MCPProxy server page on the same HTTPS origin in the currently used browser. **Copy link** copies the native URL for deliberate handoff to the account owner. MCPProxy handles PKCE, callback and token refresh.
+- **API keys:** **Set credential** offers an explicitly clicked **Paste from clipboard** button and temporary **Show / hide** controls. Sidekick never automatically submits clipboard contents.
+- **Profiles:** **New profile** allows selecting multiple upstreams and assigns them through MCPProxy's native profile APIs. If an assignment fails, it reports partial success and preserves the profile for correction.
+- **Workstation availability:** the attention dashboard treats offline Obsidian Pegasus and Galactica as *expected offline* and shows them under the dedicated connection filter. Upstream status in MCPProxy remains unchanged.
+- **Quarantine:** trust and tool review remain enforced exclusively by MCPProxy; Sidekick cannot independently approve tools or override global security policy.

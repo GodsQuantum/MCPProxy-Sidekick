@@ -123,6 +123,12 @@ await evaluate("document.querySelector('.modal-close').click();openCredential('g
 assert(await evaluate("!!document.querySelector('#credential-form')"),"credential form missing");
 await evaluate("document.querySelector('.modal-close').click();true");
 
+// Regression: status filters, direct OAuth links and guided profile setup.
+assert(await evaluate("!!document.querySelector('#connection-filter') && !!document.querySelector('.oauth-copy[data-name=\\\"google-oauth\\\"]')"),"Connection status filter or native OAuth link copy missing");
+await evaluate("document.querySelector('#new-profile').click();true");
+assert(await evaluate("!!document.querySelector('.profile-new-server') && !!document.querySelector('#profile-select-none')"),"Guided profile assignment checklist missing");
+await evaluate("document.querySelector('.modal-close').click();true");
+
 // A regular OAuth login opens the official MCPProxy UI in this browser.
 // It must not create a competing Sidekick flow or a stranded 502 popup.
 const pageIDs=new Set((await tabs()).filter(x=>x.type==="page").map(x=>x.id));
