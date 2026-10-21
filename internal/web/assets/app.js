@@ -227,7 +227,7 @@ function connectionCard(c){
   const memberships=(c.profiles||[]).join(", ")||"Unassigned";
   const auth=c.oauth?"OAuth":(c.credential_configured?"API credential":"No auth detected");
   let quick=c.oauth
-    ?'<button class="secondary oauth-start" data-name="'+esc(c.name)+'">'+(c.authenticated?"Reconnect OAuth":"Connect OAuth")+'</button>'
+    ?'<button class="secondary oauth-native" data-name="'+esc(c.name)+'">'+(c.authenticated?"Reconnexion OAuth":"Connexion OAuth")+'</button><button class="secondary oauth-start" data-name="'+esc(c.name)+'">CloakBrowser</button>'
     :'<button class="secondary credential-open" data-name="'+esc(c.name)+'">Set credential</button>';
   return '<article class="server-card connection-card" data-name="'+esc(c.name)+'">'+
     '<div class="server-top"><div><h3>'+esc(c.name)+'</h3><span class="muted">'+esc(memberships)+'</span></div>'+badge(c.status,c.enabled,c.quarantined)+'</div>'+
@@ -243,6 +243,7 @@ function renderConnections(){
   root.innerHTML=list.length?list.map(connectionCard).join(""):'<div class="empty">No matching connections.</div>';
   $$(".connection-open",root).forEach(b=>b.onclick=()=>openConnection(b.dataset.name,b));
   $$(".oauth-start",root).forEach(b=>b.onclick=()=>startOAuth(b.dataset.name));
+  $$(".oauth-native",root).forEach(b=>b.onclick=()=>openNativeOAuth(b.dataset.name));
   $$(".credential-open",root).forEach(b=>b.onclick=()=>openCredential(b.dataset.name,b));
 }
 
@@ -252,7 +253,7 @@ async function openConnection(name,opener){
     const profiles=(c.profiles||[]).map(x=>'<span class="chip">'+esc(x)+'</span>').join("")||'<span class="muted">Unassigned</span>';
     const scopes=(c.oauth_scopes||[]).join("\n");
     const actions=(c.actions||[]).filter(x=>x!=="reconnect").map(a=>'<button type="button" class="secondary connection-action" data-action="'+esc(a)+'">'+esc(titleCase(a))+'</button>').join("");
-    const oauth=c.oauth?'<section class="connection-section"><h3>OAuth scopes</h3><label for="scope-input">Configured scopes<textarea id="scope-input" rows="6">'+esc(scopes)+'</textarea></label><div id="scope-preview" class="muted" role="status" aria-live="polite">One scope per line.</div><div class="card-actions"><button type="button" class="secondary" id="scope-preview-btn">Preview changes</button><button type="button" class="primary" id="scope-apply-btn">Apply scopes</button><button type="button" class="secondary oauth-start" data-name="'+esc(c.name)+'">Reconnect OAuth</button></div></section>':"";
+    const oauth=c.oauth?'<section class="connection-section"><h3>OAuth scopes</h3><label for="scope-input">Configured scopes<textarea id="scope-input" rows="6">'+esc(scopes)+'</textarea></label><div id="scope-preview" class="muted" role="status" aria-live="polite">One scope per line.</div><div class="card-actions"><button type="button" class="secondary" id="scope-preview-btn">Preview changes</button><button type="button" class="primary" id="scope-apply-btn">Apply scopes</button><button type="button" class="secondary oauth-native" data-name="'+esc(c.name)+'">Connexion dans ce navigateur</button><button type="button" class="secondary oauth-start" data-name="'+esc(c.name)+'">Via CloakBrowser</button></div></section>':"";
     openModal(
       '<h2 id="modal-title">'+esc(c.name)+'</h2>'+
       '<div class="connection-hero"><div>'+badge(c.status,c.enabled,c.quarantined)+'</div><strong>'+esc(c.tool_count||0)+' tools</strong></div>'+
@@ -263,6 +264,7 @@ async function openConnection(name,opener){
       opener
     );
     $$(".oauth-start",$("#modal")).forEach(b=>b.onclick=()=>startOAuth(b.dataset.name));
+    $$(".oauth-native",$("#modal")).forEach(b=>b.onclick=()=>openNativeOAuth(b.dataset.name));
     $$(".credential-open",$("#modal")).forEach(b=>b.onclick=()=>openCredential(b.dataset.name,b));
     $$(".connection-action",$("#modal")).forEach(b=>b.onclick=()=>connectionAction(c.name,b.dataset.action));
     if(c.oauth){
@@ -359,6 +361,21 @@ async function restoreOmniRouteMaster(){
   }catch(e){toast(e.message)}
 }
 
+// On shared-origin deployments MCPProxy's own authenticated UI handles the
+// OAuth flow, popup, PKCE callback, refresh tokens and server review. No
+// Sidekick backend config rewrite is needed at login time.
+function nativeOAuthURL(name){
+  const target=new URL("/ui/servers/"+encodeURIComponent(name),location.origin);
+  if(target.origin!==location.origin) throw new Error("Unsafe MCPProxy login origin");
+  return target.href;
+}
+function openNativeOAuth(name){
+  const url=nativeOAuthURL(name);
+  const popup=window.open(url,"_blank","noopener,noreferrer");
+  if(!popup)toast("Pop-up bloquée : ouvrez "+url);
+  else toast("MCPProxy : connectez "+name+" avec le compte souhaité.");
+}
+
 async function startOAuth(name){
   const popup=window.open("about:blank","mcp-oauth-"+name);
   if(!popup){ toast("Popup blocked. Allow popups for this site and retry."); return; }
@@ -368,8 +385,15 @@ async function startOAuth(name){
     try{popup.document.body.textContent="Secure browser ready. Opening sign-in…"}catch{}
     popup.location=result.browser_url; popup.focus(); toast("OAuth browser opened for "+name+". Complete sign-in there."); setTimeout(load,2500);
   }catch(e){
-    try{popup.document.body.textContent="OAuth start failed: "+e.message}catch{}
-    toast("OAuth start failed: "+e.message);
+    // Never strand the user on a 502. The native MCPProxy UI remains usable
+    // from the current browser without opening any new managed CDP tabs.
+    try{
+      popup.document.body.textContent="CloakBrowser indisponible. Ouvrir la connexion native : ";
+      const a=popup.document.createElement("a");
+      a.href=nativeOAuthURL(name);a.textContent="MCPProxy OAuth";
+      popup.document.body.append(a);
+    }catch{}
+    toast("CloakBrowser indisponible : utilisez Connexion OAuth dans ce navigateur.");
   }
 }
 
