@@ -224,7 +224,7 @@ function renderProfiles(){
 }
 
 function isExpectedOffline(c){
-  return /^obsidian-(pegasus|galactica)$/.test(String(c?.name||"")) && !c.ready;
+  return /^obsidian-[a-z0-9_-]+$/.test(String(c?.name||"")) && !c.ready;
 }
 
 function connectionCard(c){
