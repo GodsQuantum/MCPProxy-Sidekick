@@ -371,9 +371,11 @@ function nativeOAuthURL(name){
 }
 function openNativeOAuth(name){
   const url=nativeOAuthURL(name);
-  const popup=window.open(url,"_blank","noopener,noreferrer");
-  if(!popup)toast("Pop-up bloquée : ouvrez "+url);
-  else toast("MCPProxy : connectez "+name+" avec le compte souhaité.");
+  const popup=window.open("about:blank","_blank");
+  if(!popup){toast("Pop-up bloquée : ouvrez "+url);return}
+  try{popup.opener=null}catch{}
+  popup.location=url;
+  toast("MCPProxy : connectez "+name+" avec le compte souhaité.");
 }
 
 async function startOAuth(name){
