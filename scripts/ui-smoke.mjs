@@ -123,31 +123,22 @@ await evaluate("document.querySelector('.modal-close').click();openCredential('g
 assert(await evaluate("!!document.querySelector('#credential-form')"),"credential form missing");
 await evaluate("document.querySelector('.modal-close').click();true");
 
-const before=(await tabs()).filter(x=>x.type==="page").length;
-await call("Runtime.evaluate",{expression:"document.querySelector('.oauth-start[data-name=\"google-oauth\"]').click();true",returnByValue:true,userGesture:true});
-let popupError=false;
-const popupDeadline=Date.now()+12000;
-while(Date.now()<popupDeadline){
-  const pages=(await tabs()).filter(x=>x.type==="page");
-  if(pages.length>before){
-    for(const p of pages){
-      if(p.id===tab.id)continue;
-      const s=new WebSocket(p.webSocketDebuggerUrl);
-      await new Promise((resolve,reject)=>{s.onopen=resolve;s.onerror=reject});
-      const id=1;
-      const result=await new Promise((resolve,reject)=>{
-        const timer=setTimeout(()=>reject(new Error("popup CDP timeout")),3000);
-        s.onmessage=e=>{const m=JSON.parse(e.data);if(m.id===id){clearTimeout(timer);resolve(m)}};
-        s.send(JSON.stringify({id,method:"Runtime.evaluate",params:{expression:"document.body?.innerText||''",returnByValue:true}}));
-      }).catch(()=>null);
-      s.close();
-      if(result?.result?.result?.value?.includes("OAuth start failed")) popupError=true;
-    }
-    if(popupError)break;
+// A regular OAuth login opens the official MCPProxy UI in this browser.
+// It must not create a competing Sidekick flow or a stranded 502 popup.
+const pageIDs=new Set((await tabs()).filter(x=>x.type==="page").map(x=>x.id));
+await call("Runtime.evaluate",{expression:"document.querySelector('.oauth-native[data-name=\\\"google-oauth\\\"]').click();true",returnByValue:true,userGesture:true});
+let openedNative=false;
+const nativeDeadline=Date.now()+12000;
+while(Date.now()<nativeDeadline){
+  const pages=(await tabs()).filter(x=>x.type==="page"&&!pageIDs.has(x.id));
+  if(pages.some(p=>String(p.url||"").includes("/ui/servers/google-oauth"))){
+    openedNative=true;
+    break;
   }
   await sleep(200);
 }
-assert(popupError,"OAuth failure popup was closed or did not preserve the error");
+assert(openedNative,"Native MCPProxy login did not open in the user's browser");
+assert((await tabs()).some(p=>p.id===tab.id),"Original Sidekick session was closed");
 
 await evaluate("document.querySelector('.delete-profile[data-profile=\"browser-test\"]').click();true");
 await waitFor("!document.querySelector('#profiles-list')?.innerText.includes('/mcp/p/browser-test')","profile deletion not rendered");
