@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -248,4 +249,50 @@ func makeDiff(current, desired []string) Diff {
 		Current: current, Desired: desired, Added: added, Removed: removed,
 		ReauthRequired: len(added) > 0 || len(removed) > 0,
 	}
+}
+
+// EnsureCallbackBaseURL configures MCPProxy's native HTTPS callback for browsers
+// on a different machine or Docker network. No loopback relay is necessary.
+// The browser's public origin must already route /oauth/callback/<server>
+// to the MCPProxy HTTP listener; OAuth state/PKCE checks remain MCPProxy-owned.
+func (s Service) EnsureCallbackBaseURL(ctx context.Context, server, origin string) (bool, error) {
+	if s.Backend == nil {
+		return false, errors.New("OAuth config backend is not configured")
+	}
+	origin = strings.TrimSpace(origin)
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed == nil || parsed.Scheme != "https" || parsed.Hostname() == "" ||
+		parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false, errors.New("OAuth callback origin must be an HTTPS origin without path, query, fragment or credentials")
+	}
+	doc, err := s.Backend.GetConfig(ctx)
+	if err != nil {
+		return false, err
+	}
+	_, oauth, err := locateOAuth(doc, server)
+	if err != nil {
+		return false, err
+	}
+	if current, _ := oauth["callback_base_url"].(string); current == origin {
+		return false, nil
+	}
+	oauth["callback_base_url"] = origin
+	if err := s.Backend.ValidateConfig(ctx, doc); err != nil {
+		return false, fmt.Errorf("validate public OAuth callback origin: %w", err)
+	}
+	if err := s.Backend.ApplyConfig(ctx, doc); err != nil {
+		return false, fmt.Errorf("apply public OAuth callback origin: %w", err)
+	}
+	verified, err := s.Backend.GetConfig(ctx)
+	if err != nil {
+		return false, fmt.Errorf("verify public OAuth callback origin: %w", err)
+	}
+	_, gotOAuth, err := locateOAuth(verified, server)
+	if err != nil {
+		return false, fmt.Errorf("verify public OAuth callback origin: %w", err)
+	}
+	if got, _ := gotOAuth["callback_base_url"].(string); got != origin {
+		return false, fmt.Errorf("MCPProxy did not retain requested public OAuth callback origin")
+	}
+	return true, nil
 }
