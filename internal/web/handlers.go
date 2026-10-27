@@ -286,6 +286,26 @@ func (s *Server) cryptoComCredentialAdapter(name string) (cryptocomadapter.Adapt
 	}
 }
 
+// handleCredentialSchema exposes only field names/types, never credential values.
+func (s *Server) handleCredentialSchema(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if name == "" {
+		writeError(w, 400, "missing server name")
+		return
+	}
+	config, err := s.Proxy.GetConfig(r.Context())
+	if err != nil {
+		writeError(w, 502, "MCPProxy configuration unavailable")
+		return
+	}
+	schema := credentials.Describe(name, config)
+	if schema.Kind == "unavailable" {
+		writeError(w, 404, "unknown upstream")
+		return
+	}
+	writeJSON(w, 200, schema)
+}
+
 func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
@@ -293,21 +313,68 @@ func (s *Server) handleCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Mode        string `json:"mode"`
-		HeaderName  string `json:"header_name"`
-		Value       string `json:"value"`
-		Secret      string `json:"secret"`
-		VaultItem   string `json:"vault_item"`
-		ExpiresDays int    `json:"expires_days"`
+		Mode        string            `json:"mode"`
+		HeaderName  string            `json:"header_name"`
+		Value       string            `json:"value"`
+		Secret      string            `json:"secret"`
+		Values      map[string]string `json:"values"`
+		VaultItem   string            `json:"vault_item"`
+		ExpiresDays int               `json:"expires_days"`
 	}
 	if decodeJSON(w, r, &req) != nil {
 		return
+	}
+
+	// Never attach HTTP headers to stdio or OAuth connections.
+	if req.Mode == "bearer" || req.Mode == "x-api-key" || req.Mode == "custom-header" {
+		cfg, cfgErr := s.Proxy.GetConfig(r.Context())
+		if cfgErr != nil {
+			writeError(w, 502, "MCPProxy configuration unavailable")
+			return
+		}
+		if credentials.Describe(name, cfg).Kind != "header" {
+			writeError(w, 400, "this connection does not accept HTTP header credentials")
+			return
+		}
 	}
 
 	preview := credentials.Mask(req.Value)
 	fingerprintInput := req.Value
 	var err error
 	switch {
+	case req.Mode == "stdio-env":
+		var config map[string]any
+		config, err = s.Proxy.GetConfig(r.Context())
+		if err != nil {
+			writeError(w, 502, "MCPProxy configuration unavailable")
+			return
+		}
+		schema := credentials.Describe(name, config)
+		if schema.Kind != "env" {
+			writeError(w, 400, "this upstream does not accept environment credentials")
+			return
+		}
+		if len(req.Values) != len(schema.Fields) {
+			writeError(w, 400, "all credential fields are required")
+			return
+		}
+		allowed := make(map[string]bool, len(schema.Fields))
+		for _, field := range schema.Fields {
+			allowed[field.Name] = true
+		}
+		for field, value := range req.Values {
+			if !allowed[field] || strings.TrimSpace(value) == "" {
+				writeError(w, 400, "unknown or empty credential field")
+				return
+			}
+		}
+		err = s.Credentials.SetEnvironment(r.Context(), name, req.Values)
+		if err != nil {
+			writeError(w, 502, "Unable to apply environment credentials")
+			return
+		}
+		preview = fmt.Sprintf("%d environment credentials configured", len(req.Values))
+		fingerprintInput = name + "|env-fields"
 	case (name == "cryptocom-app" || name == "cryptocom-exchange") && req.Mode == "cryptocom-api-pair":
 		adapter, _ := s.cryptoComCredentialAdapter(name)
 		var result cryptocomadapter.Result
