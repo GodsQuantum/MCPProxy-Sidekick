@@ -45,6 +45,7 @@ const server=http.createServer(async(req,res)=>{
         {name:"github",protocol:"http",headers:{Authorization:"Bearer SUPER_SECRET_FAKE_CONFIG"}},
         {name:"filesystem",protocol:"stdio",args:["/bin/true"]},
         {name:"ebay-api",protocol:"stdio",args:["docker","run","-e","EBAY_CLIENT_ID","-e","EBAY_CLIENT_SECRET"]},
+        {name:"new-undocumented-mcp",protocol:"streamable-http",url:"https://mcp.example.com/undocumented"},
         {name:"google-oauth",protocol:"http",oauth:{provider:"google"}}
       ]}});
     if(req.method==="GET" && url.pathname==="/api/v1/servers")

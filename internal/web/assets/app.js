@@ -1,6 +1,6 @@
 "use strict";
 
-const state={data:null,connections:[],csrf:"",view:"overview",mcpproxyVersion:"",modalReturnFocus:null,activityEvents:[],eventSource:null,eventFallbacks:0,eventRetryStreak:0,eventReconnectTimer:null,pollTimer:null,refreshTimer:null};
+const state={data:null,connections:[],newUpstreams:new Set(),csrf:"",view:"overview",mcpproxyVersion:"",modalReturnFocus:null,activityEvents:[],eventSource:null,eventFallbacks:0,eventRetryStreak:0,eventReconnectTimer:null,pollTimer:null,refreshTimer:null};
 const configuredBase=document.querySelector('meta[name="sidekick-mount-path"]')?.content?.trim()||"";
 const BASE=(configuredBase||location.pathname).replace(/\/+$/,"");
 const $=(s,r=document)=>r.querySelector(s);
@@ -79,6 +79,7 @@ async function refreshConnectionsOnly(){
   try{
     const c=await api("/api/connections");
     state.connections=c.connections||[];
+    detectNewUpstreams();
     if(state.data){
       const list=state.connections;
       state.data.summary={
@@ -176,8 +177,10 @@ async function load({allowEventStart=true}={}){
     try{
       const c=await api("/api/connections");
       state.connections=c.connections||[];
+    detectNewUpstreams();
     }catch{
       state.connections=(d.upstreams||[]).map(x=>({...x,ready:/ready|connected/i.test(x.status||""),actions:[x.enabled?"disable":"enable","restart",...(x.oauth?["reconnect"]:[])]}));
+      detectNewUpstreams();
     }
     $("#login").hidden=true; $("#app").hidden=false;
     render(); $("#refresh-state").textContent=(d.warnings||[]).length?"Degraded":"Live";
@@ -200,6 +203,34 @@ function render(){
   renderTokens();
   renderAttention();
   renderSettings();
+}
+
+const seenUpstreamsKey="sidekick-seen-connections-v1";
+const reviewUpstreamsKey="sidekick-auth-review-pending-v1";
+
+function detectNewUpstreams(){
+  const now=state.connections.map(c=>String(c.name)).filter(Boolean);
+  try{
+    const raw=localStorage.getItem(seenUpstreamsKey);
+    const seen=raw?JSON.parse(raw):null;
+    const old=Array.isArray(seen)?seen:[];
+    const pendingRaw=localStorage.getItem(reviewUpstreamsKey);
+    const pending=JSON.parse(pendingRaw||"[]");
+    const additions=Array.isArray(seen)?now.filter(n=>!old.includes(n)):[];
+    const outstanding=[...new Set([...(Array.isArray(pending)?pending:[]),...additions])].filter(n=>now.includes(n));
+    state.newUpstreams=new Set(outstanding);
+    localStorage.setItem(seenUpstreamsKey,JSON.stringify([...new Set([...old,...now])]));
+    localStorage.setItem(reviewUpstreamsKey,JSON.stringify(outstanding));
+  }catch{
+    // Browser storage can be disabled; credentials and connection discovery still work.
+    state.newUpstreams=new Set();
+  }
+}
+
+function acknowledgeNewUpstream(name){
+  state.newUpstreams.delete(name);
+  try{localStorage.setItem(reviewUpstreamsKey,JSON.stringify([...state.newUpstreams]))}catch{}
+  renderConnections();
 }
 
 function renderSummary(){
@@ -231,13 +262,16 @@ function connectionCard(c){
   const memberships=(c.profiles||[]).join(", ")||"Unassigned";
   const offline=isExpectedOffline(c);
   const auth=c.oauth?"OAuth":(c.name==="ebay-api"?"Client ID + Client Secret":(c.credential_configured?"API credential":c.protocol==="stdio"?"Local MCP":"No auth detected"));
-  let quick=c.oauth
+  const isNew=state.newUpstreams.has(c.name);
+  let quick=isNew
+    ? '<button class="primary credential-open" data-name="'+esc(c.name)+'">Review authentication</button>'
+    : c.oauth
     ?'<button class="secondary oauth-native" data-name="'+esc(c.name)+'">'+(c.authenticated?"Reconnexion OAuth":"Connexion OAuth")+'</button><button class="ghost oauth-copy" data-name="'+esc(c.name)+'" title="Copy MCPProxy native sign-in URL">Copy link</button><button class="secondary oauth-start" data-name="'+esc(c.name)+'">CloakBrowser</button>'
     : ((c.protocol==="stdio"&&c.name!=="ebay-api")||(c.ready&&!c.credential_configured))
       ? ""
       : '<button class="secondary credential-open" data-name="'+esc(c.name)+'">Configure credentials</button>';
   return '<article class="server-card connection-card" data-name="'+esc(c.name)+'">'+
-    '<div class="server-top"><div><h3>'+esc(c.name)+'</h3><span class="muted">'+esc(memberships)+'</span></div>'+(offline?'<span class="badge">Expected offline</span>':badge(c.status,c.enabled,c.quarantined))+'</div>'+
+    '<div class="server-top"><div><h3>'+esc(c.name)+'</h3><span class="muted">'+esc(memberships)+(isNew?' · New MCP: credentials to review':'')+'</span></div>'+(offline?'<span class="badge">Expected offline</span>':badge(c.status,c.enabled,c.quarantined))+'</div>'+
     '<div class="server-meta"><span>'+esc(auth)+' · '+esc(c.protocol||"MCP")+'</span><strong>'+esc(c.tool_count||0)+' tools</strong></div>'+
     '<div class="preview">'+esc(c.credential_preview||(c.oauth?(c.authenticated?"OAuth connected":"OAuth not connected"):"Credential not configured"))+'</div>'+
     '<div class="card-actions"><button class="primary connection-open" data-name="'+esc(c.name)+'">Open</button>'+quick+'</div></article>';
@@ -245,6 +279,19 @@ function connectionCard(c){
 
 function renderConnections(){
   const root=$("#connections-list"); if(!root)return;
+  let newNotice=$("#new-credential-notice");
+  if(!newNotice){
+    newNotice=document.createElement("div");
+    newNotice.id="new-credential-notice";
+    newNotice.className="card";
+    root.before(newNotice);
+  }
+  const newNames=[...state.newUpstreams];
+  newNotice.hidden=newNames.length===0;
+  newNotice.innerHTML=newNames.length
+    ? '<strong>New MCP connections detected ('+newNames.length+')</strong><p class="muted">Review the authentication fields required by each server. Sidekick uses the upstream configuration and flags unknown requirements rather than guessing.</p><div class="card-actions">'+newNames.map(n=>'<button class="secondary credential-open" data-name="'+esc(n)+'">Review '+esc(n)+'</button>').join("")+'</div>'
+    : "";
+  $$(".credential-open",newNotice).forEach(b=>b.onclick=()=>openCredential(b.dataset.name,b));
   const q=($("#connection-search")?.value||"").toLowerCase();
   const filter=$("#connection-filter")?.value||"all";
   const list=(state.connections||[]).filter(c=>{
@@ -427,11 +474,22 @@ async function startOAuth(name){
 }
 
 
-async function openCredential(name,opener){
+async function openCredential(name,opener,allowManual=false){
   let schema;
   try{
     schema=await api("/api/upstreams/"+encodeURIComponent(name)+"/credential/schema");
   }catch(e){toast("Credential configuration unavailable: "+e.message);return}
+  if(state.newUpstreams.has(name)){
+    acknowledgeNewUpstream(name);
+    opener=$$(".connection-open").find(b=>b.dataset.name===name)||opener;
+  }
+  if(schema.kind==="undetermined"&&!allowManual){
+    openModal('<h2 id="modal-title">Authentication not published · '+esc(name)+'</h2><p class="muted">'+esc(schema.hint||"No authentication metadata found.")+'</p>'+
+      '<p>Check the server official README or MCP Registry entry. Sidekick cannot safely infer an API key, a Bearer token or OAuth from an unauthenticated URL alone.</p>'+
+      '<button class="secondary" id="manual-credential">Advanced: configure a documented HTTP header</button>',opener);
+    $("#manual-credential").onclick=()=>openCredential(name,opener,true);
+    return;
+  }
   const isOpenAlex=name==="openalex-github";
   const isCryptoPrivate=name==="cryptocom-app"||name==="cryptocom-exchange";
   if(schema.kind==="oauth"){
@@ -448,7 +506,8 @@ async function openCredential(name,opener){
     return;
   }
   const envMode=schema.kind==="env";
-  const help='<p class="muted">'+esc(schema.hint||"Credentials are transmitted once to MCPProxy and not displayed again.")+'</p>';
+  const help='<p class="muted">'+esc(schema.hint||"Credentials are transmitted once to MCPProxy and not displayed again.")+'</p>'+
+    (schema.source?'<p class="muted">Detection source: '+esc(schema.source)+'</p>':'');
   const fields=envMode
     ? (schema.fields||[]).map((field,i)=>
       '<label for="cred-env-'+i+'">'+esc(field.label||field.name)+
