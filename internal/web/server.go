@@ -66,6 +66,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/connections/{name}/oauth-scopes", s.requireSession(s.handleOAuthScopesGet))
 	mux.HandleFunc("POST /api/connections/{name}/oauth-scopes/preview", s.requireSession(s.requireMutation(s.handleOAuthScopesPreview)))
 	mux.HandleFunc("POST /api/connections/{name}/oauth-scopes/apply", s.requireSession(s.requireMutation(s.handleOAuthScopesApply)))
+	mux.HandleFunc("GET /api/upstreams/{name}/credential/schema", s.requireSession(s.handleCredentialSchema))
 	mux.HandleFunc("POST /api/upstreams/{name}/credential", s.requireSession(s.requireMutation(s.handleCredential)))
 	mux.HandleFunc("POST /api/upstreams/{name}/oauth/start", s.requireSession(s.requireMutation(s.handleOAuthStart)))
 	mux.HandleFunc("POST /api/adapters/omniroute/restore-master", s.requireSession(s.requireMutation(s.handleOmniRouteRestoreMaster)))

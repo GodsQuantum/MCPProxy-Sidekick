@@ -7,6 +7,7 @@ let eventConnections = 0;
 const servers = [
   {name:"github",enabled:true,status:"ready",protocol:"http",tool_count:11,headers:{Authorization:"Bearer fake-secret"}},
   {name:"filesystem",enabled:true,status:"ready",protocol:"stdio",tool_count:7},
+  {name:"ebay-api",enabled:false,status:"disabled",protocol:"stdio",tool_count:0},
   {name:"google-oauth",enabled:true,status:"ready",protocol:"http",tool_count:5,authenticated:true,oauth:{provider:"google"}},
 ];
 
@@ -39,6 +40,13 @@ const server=http.createServer(async(req,res)=>{
       req.on("close",()=>clearInterval(timer));
       return;
     }
+    if(req.method==="GET" && url.pathname==="/api/v1/config")
+      return json(res,200,{success:true,data:{mcpServers:[
+        {name:"github",protocol:"http",headers:{Authorization:"Bearer SUPER_SECRET_FAKE_CONFIG"}},
+        {name:"filesystem",protocol:"stdio",args:["/bin/true"]},
+        {name:"ebay-api",protocol:"stdio",args:["docker","run","-e","EBAY_CLIENT_ID","-e","EBAY_CLIENT_SECRET"]},
+        {name:"google-oauth",protocol:"http",oauth:{provider:"google"}}
+      ]}});
     if(req.method==="GET" && url.pathname==="/api/v1/servers")
       return json(res,200,{success:true,data:{servers}});
     if(req.method==="GET" && url.pathname==="/api/v1/profiles")

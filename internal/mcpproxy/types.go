@@ -20,6 +20,7 @@ type Server struct {
 }
 
 type ServerPatch struct {
+	Env      map[string]string `json:"env,omitempty"`
 	URL      string            `json:"url,omitempty"`
 	Protocol string            `json:"protocol,omitempty"`
 	Enabled  *bool             `json:"enabled,omitempty"`
