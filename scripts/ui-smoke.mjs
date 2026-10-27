@@ -130,6 +130,23 @@ assert(await evaluate("!document.querySelector('#credential-form #cred-mode')"),
 
 await evaluate("document.querySelector('.modal-close').click();true");
 
+// Regression: simulate an upstream newly added after this browser first opened Sidekick.
+await evaluate("localStorage.setItem(seenUpstreamsKey,JSON.stringify(state.connections.map(c=>c.name).filter(n=>n!=='ebay-api')));localStorage.removeItem(reviewUpstreamsKey);detectNewUpstreams();renderConnections();true");
+await waitFor("document.querySelector('#new-credential-notice:not([hidden])')?.innerText.includes('ebay-api')","new MCP authentication review banner missing");
+assert(await evaluate("!!document.querySelector('.connection-card[data-name=ebay-api] .credential-open')"),"new MCP card review action missing");
+await evaluate("document.querySelector('#new-credential-notice .credential-open[data-name=ebay-api]').click();true");
+await waitFor("!!document.querySelector('#credential-form [data-env-name=EBAY_CLIENT_ID]')","new upstream did not open discovered env form");
+await waitFor("document.querySelector('#new-credential-notice[hidden]')!==null","acknowledged upstream remained in banner");
+await evaluate("document.querySelector('.modal-close').click();true");
+
+// Unknown remote authentication must not be guessed to be a Bearer token.
+await evaluate("openCredential('new-undocumented-mcp');true");
+await waitFor("!!document.querySelector('#manual-credential')","unknown auth must require explicit advanced choice");
+assert(await evaluate("!document.querySelector('#cred-mode')"),"undocumented remote MCP defaulted to Bearer token");
+await evaluate("document.querySelector('#manual-credential').click();true");
+await waitFor("!!document.querySelector('#cred-mode')","manual HTTP header fallback missing");
+await evaluate("document.querySelector('.modal-close').click();true");
+
 // Regression: status filters, direct OAuth links and guided profile setup.
 assert(await evaluate("!!document.querySelector('#connection-filter') && !!document.querySelector('.oauth-copy[data-name=\\\"google-oauth\\\"]')"),"Connection status filter or native OAuth link copy missing");
 await evaluate("document.querySelector('#new-profile').click();true");
