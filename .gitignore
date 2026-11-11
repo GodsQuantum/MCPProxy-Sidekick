@@ -14,3 +14,7 @@ screenshots/live/
 .worktrees/
 
 .superpowers/
+
+# Deployments with per-account configuration are private to the host
+deploy/cloakbrowser/compose.*.yaml
+deploy/cloakbrowser/*_ACCOUNT_SETUP.md
