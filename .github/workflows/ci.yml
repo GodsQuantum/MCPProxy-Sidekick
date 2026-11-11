@@ -23,7 +23,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: '1.27.x'
+          check-latest: true
           cache: true
       - name: Go tests
         run: go test -race ./...
@@ -159,7 +160,7 @@ jobs:
               exit 1
             fi
           done
-          for endpoint in clients attention access/explain; do
+          for endpoint in clients attention; do
             code="$(curl -sS -o "$response" -w '%{http_code}' \
               -H "X-API-Key: $MCPPROXY_TEST_KEY" \
               "http://127.0.0.1:19080/api/v1/$endpoint")"
@@ -168,6 +169,16 @@ jobs:
               *) cat "$response"; exit 1 ;;
             esac
           done
+          # MCPProxy 0.73+ requires an explicit caller scope and an upstream
+          # tool for access/explain; calling it empty is *expected* HTTP 400.
+          # Assert this validation contract, never mistake it for a 5xx outage.
+          code="$(curl -sS -o "$response" -w '%{http_code}' \
+            -H "X-API-Key: $MCPPROXY_TEST_KEY" \
+            "http://127.0.0.1:19080/api/v1/access/explain")"
+          if [[ "$code" != "400" ]] || ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "exactly one of client, token, profile, anonymous is required" in d.get("error",""); print("MCPPROXY_LATEST_SCOPE_VALIDATION_PASS")' "$response"; then
+            cat "$response"
+            exit 1
+          fi
 
   codeql:
     runs-on: ubuntu-latest
