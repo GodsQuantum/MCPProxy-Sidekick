@@ -108,6 +108,29 @@ form schema or in Sidekick's credential-save response.
 For already-connected public remote MCPs, the UI does not request a generic API key.
 Credential updates are intentional user submissions and never bulk overwrite other MCPs.
 
+### Automatic authentication review for newly added MCP servers
+
+Whenever Sidekick observes a new MCPProxy upstream (including servers added outside
+Sidekick), Connections displays a **New MCP connections detected** review with a
+per-server action. Acknowledging the form clears that review; the names are
+remembered in the local browser (never credentials). An existing installation
+seeds its initial inventory to avoid opening dozens of prompts on first use.
+
+Forms are computed fresh from the native MCPProxy server configuration:
+- OAuth sign-in when its OAuth metadata is declared.
+- Exact HTTP authentication header when configured (ignoring non-auth headers).
+- Separate credential environment fields for stdio MCP subprocesses; recognized
+  keys include API_KEY, CLIENT_ID/SECRET, TOKEN, PASSWORD, etc.
+- Typed adapter-specific screens for supported integrations.
+
+When an HTTP server declares **no** authentication metadata, Sidekick explicitly
+reports **authentication not published** instead of inventing Bearer/API-key
+requirements. The user can consult the MCP Registry or the server's official
+README, then deliberately open the advanced manual-header form. MCP doesn't
+mandate that a stdio server publishes its full credential schema; no client can
+promise discovery of undisclosed keys. The native OAuth flow handles standards
+based on WWW-Authenticate/protected-resource metadata when upstream supports it.
+
 ### OAuth (MCPProxy native remote sign-in)
 
 MCPProxy Server owns OAuth authorization, PKCE, state, refresh tokens, stored credentials, and trust/quarantine decisions. Sidekick is a **browser and administration front-end**, not a second OAuth server. It does not rewrite an upstream's credentials or the whole MCPProxy configuration when a user clicks **Connect**.

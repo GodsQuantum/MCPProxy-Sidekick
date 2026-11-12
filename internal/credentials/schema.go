@@ -15,6 +15,7 @@ type FormSchema struct {
 	Kind          string      `json:"kind"`
 	DefaultMode   string      `json:"default_mode,omitempty"`
 	DefaultHeader string      `json:"default_header,omitempty"`
+	Source        string      `json:"source,omitempty"`
 	Hint          string      `json:"hint,omitempty"`
 	Fields        []FormField `json:"fields,omitempty"`
 }
@@ -22,17 +23,17 @@ type FormSchema struct {
 // Describe emits only field names/types; stored credential values must never leave the server.
 func Describe(name string, config map[string]any) FormSchema {
 	if name == "cryptocom-app" || name == "cryptocom-exchange" || name == "openalex-github" || name == "postiz" || name == "paperless" || strings.HasPrefix(name, "paperless-") || name == "immich" || strings.HasPrefix(name, "immich-") {
-		return FormSchema{Kind: "adapter"}
+		return FormSchema{Kind: "adapter", Source: "integration-adapter"}
 	}
 	entry := serverEntry(name, config)
 	if len(entry) == 0 {
 		return FormSchema{Kind: "unavailable", Hint: "Upstream not found"}
 	}
 	if auth, ok := entry["oauth"].(map[string]any); ok && len(auth) > 0 {
-		return FormSchema{Kind: "oauth", Hint: "Use native MCPProxy OAuth sign-in"}
+		return FormSchema{Kind: "oauth", Source: "upstream-oauth", Hint: "Use native MCPProxy OAuth sign-in"}
 	}
 	if name == "ebay-api" {
-		return FormSchema{Kind: "env", Hint: "eBay Developer credentials (this MCP supports read-only production APIs).", Fields: []FormField{{Name: "EBAY_CLIENT_ID", Label: "Client ID", Required: true}, {Name: "EBAY_CLIENT_SECRET", Label: "Client Secret", Secret: true, Required: true}}}
+		return FormSchema{Kind: "env", Source: "upstream-provider-documentation", Hint: "eBay credentials: official upstream supports production GET requests only; Sandbox credentials are not compatible.", Fields: []FormField{{Name: "EBAY_CLIENT_ID", Label: "Client ID", Required: true}, {Name: "EBAY_CLIENT_SECRET", Label: "Client Secret", Secret: true, Required: true}}}
 	}
 	protocol, _ := entry["protocol"].(string)
 	if protocol == "stdio" {
@@ -57,7 +58,7 @@ func Describe(name string, config map[string]any) FormSchema {
 			}
 		}
 		if len(keys) == 0 {
-			return FormSchema{Kind: "none", Hint: "No credential fields configured for this local MCP"}
+			return FormSchema{Kind: "none", Source: "upstream-environment", Hint: "No credential environment variables declared. Verify the upstream documentation if a secret is needed."}
 		}
 		names := make([]string, 0, len(keys))
 		for n := range keys {
@@ -68,29 +69,44 @@ func Describe(name string, config map[string]any) FormSchema {
 		for _, n := range names {
 			fields = append(fields, FormField{Name: n, Label: strings.ReplaceAll(n, "_", " "), Secret: !strings.HasSuffix(n, "_CLIENT_ID"), Required: true})
 		}
-		return FormSchema{Kind: "env", Fields: fields, Hint: "Credentials injected into the MCP subprocess"}
+		return FormSchema{Kind: "env", Source: "upstream-environment", Fields: fields, Hint: "Fields detected from declared process environment. Consult upstream docs for any additional required variables."}
 	}
 	mode := "bearer"
 	header := ""
+	detected := false
 	if hs, ok := entry["headers"].(map[string]any); ok {
 		for k := range hs {
 			if strings.EqualFold(k, "Authorization") {
 				mode = "bearer"
 				header = ""
+				detected = true
 				break
 			}
 			if strings.EqualFold(k, "X-API-Key") {
 				mode = "x-api-key"
 				header = ""
+				detected = true
 				continue
 			}
-			if mode == "bearer" && header == "" {
+			if isAuthHeader(k) && !detected {
 				mode = "custom-header"
 				header = k
+				detected = true
 			}
 		}
 	}
-	return FormSchema{Kind: "header", DefaultMode: mode, DefaultHeader: header, Hint: "HTTP credential for this upstream"}
+	if !detected {
+		return FormSchema{Kind: "undetermined", Source: "not-published", Hint: "MCPProxy does not publish this remote server authentication method. Consult its official documentation; choose an HTTP header manually only after verifying it."}
+	}
+	return FormSchema{Kind: "header", Source: "upstream-headers", DefaultMode: mode, DefaultHeader: header, Hint: "Authentication header discovered from this upstream configuration."}
+}
+func isAuthHeader(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "authorization", "x-api-key", "x-auth-token", "x-access-token", "api-key", "x-service-token", "x-api-token":
+		return true
+	default:
+		return strings.HasSuffix(strings.ToLower(key), "-api-key") || strings.HasSuffix(strings.ToLower(key), "-auth-token")
+	}
 }
 func isSecretEnv(key string) bool {
 	if key == "" {
@@ -99,6 +115,11 @@ func isSecretEnv(key string) bool {
 	for _, r := range key {
 		if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_') {
 			return false
+		}
+	}
+	for _, literal := range []string{"API_KEY", "CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN", "REFRESH_TOKEN", "SECRET", "TOKEN", "PASSWORD"} {
+		if key == literal {
+			return true
 		}
 	}
 	for _, suffix := range []string{"_API_KEY", "_CLIENT_ID", "_CLIENT_SECRET", "_SECRET", "_TOKEN", "_PASSWORD", "_REFRESH_TOKEN", "_ACCESS_KEY"} {
