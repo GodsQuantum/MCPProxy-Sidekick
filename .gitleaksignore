@@ -1,0 +1,4 @@
+# gitleaks v8 fingerprint-only exception for known CI OAuth variable reference.
+# The historical CI curl header passes "$MCPPROXY_API_KEY" (an environment variable), not an embedded API key.
+# Keep all other historical and future findings actionable.
+349fc5c7d674b584504afc227e13c02148e99080:.github/workflows/ci.yml:curl-auth-header:114
