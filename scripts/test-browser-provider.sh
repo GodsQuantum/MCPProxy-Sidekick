@@ -5,14 +5,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROVIDER="${1:-}"
 case "$PROVIDER" in
   chromium)
-    IMAGE="${SIDEKICK_CHROMIUM_TEST_IMAGE:-lscr.io/linuxserver/chromium:latest}"
+    IMAGE="${SIDEKICK_CHROMIUM_TEST_IMAGE:-ghcr.io/linuxserver/chromium:latest}"
     PROFILE="chromium-sidekick-provider-test"
     POLICY="/etc/chromium/policies/managed/sidekick-bitwarden.json"
     VERSION_CMD="chromium --version"
     WANT_VERSION="Chromium"
     ;;
   brave)
-    IMAGE="${SIDEKICK_BRAVE_TEST_IMAGE:-lscr.io/linuxserver/brave:latest}"
+    IMAGE="${SIDEKICK_BRAVE_TEST_IMAGE:-ghcr.io/linuxserver/brave:latest}"
     PROFILE="brave-sidekick-provider-test"
     POLICY="/etc/brave/policies/managed/sidekick-bitwarden.json"
     VERSION_CMD="brave-browser --version"
