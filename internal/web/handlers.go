@@ -399,6 +399,19 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"browser_url": browser.SessionURL(), "provider": "youtube", "profile": "full"})
 		return
 	}
+	// Remote human-auth browsers need a callback that reaches MCPProxy, not
+	// the browser machine's 127.0.0.1. Prefer MCPProxy's native HTTPS origin.
+	// No extra relay, port exposure or custom redirect rewrite is required.
+	if publicURL := strings.TrimSpace(s.Cfg.PublicBaseURL); publicURL != "" {
+		parsed, parseErr := url.Parse(publicURL)
+		if parseErr == nil && parsed.Scheme == "https" && parsed.Host != "" {
+			origin := parsed.Scheme + "://" + parsed.Host
+			if _, err := (oauthconfig.Service{Backend: s.Proxy}).EnsureCallbackBaseURL(r.Context(), name, origin); err != nil {
+				writeError(w, http.StatusBadGateway, "prepare native HTTPS OAuth callback: "+err.Error())
+				return
+			}
+		}
+	}
 	result, err := s.OAuth.StartWithBrowser(r.Context(), name, browser)
 	if err != nil {
 		// Error text contains only the failed stage/status; auth URLs and tokens

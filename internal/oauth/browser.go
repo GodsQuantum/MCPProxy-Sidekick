@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/GodsQuantum/mcpproxy-sidekick/internal/mcpproxy"
@@ -45,47 +46,94 @@ type cdpResponse struct {
 	Result json.RawMessage `json:"result,omitempty"`
 }
 
-func (b Browser) clearPageTargets(ctx context.Context, client *http.Client, base string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/json/list", nil)
+// Only tabs created by Sidekick can be closed by Sidekick.
+var ownedOAuthTargets sync.Map
+
+func (b Browser) trackOwnedTarget(ctx context.Context, client *http.Client, base, targetID string) {
+	if targetID == "" {
+		return
+	}
+	old, exists := ownedOAuthTargets.Swap(base, targetID)
+	if !exists || old == targetID {
+		return
+	}
+	// Best effort: never fail a login or touch a pre-existing human tab.
+	_ = b.closeOwnedTarget(ctx, client, base, old.(string))
+}
+
+func (b Browser) closeOwnedTarget(ctx context.Context, client *http.Client, base, id string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/json/close/"+url.PathEscape(id), nil)
 	if err != nil {
 		return err
 	}
 	req.Close = true
 	resp, err := client.Do(req)
+	if err == nil {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 2048))
+		resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return nil
+		}
+	}
+	// CloakBrowser exposes Target.closeTarget over CDP, not /json/close.
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+"/json/version", nil)
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		resp.Body.Close()
-		return fmt.Errorf("CDP target list: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	req.Close = true
+	versionResp, err := client.Do(req)
+	if err != nil {
+		return err
 	}
-	var targets []cdpTarget
-	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
-		resp.Body.Close()
-		return fmt.Errorf("decode CDP target list: %w", err)
+	defer versionResp.Body.Close()
+	if versionResp.StatusCode < 200 || versionResp.StatusCode >= 300 {
+		return fmt.Errorf("CDP version returned HTTP %d", versionResp.StatusCode)
 	}
-	resp.Body.Close()
-
-	for _, target := range targets {
-		if target.Type != "page" || strings.TrimSpace(target.ID) == "" {
-			continue
-		}
-		closeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/json/close/"+url.PathEscape(target.ID), nil)
-		if err != nil {
+	var v cdpVersion
+	if err := json.NewDecoder(io.LimitReader(versionResp.Body, 8192)).Decode(&v); err != nil {
+		return err
+	}
+	wsURL, err := url.Parse(v.WebSocketDebuggerURL)
+	if err != nil {
+		return err
+	}
+	cdpURL, err := url.Parse(base)
+	if err != nil {
+		return err
+	}
+	wsURL.Host = cdpURL.Host
+	if cdpURL.Scheme == "https" {
+		wsURL.Scheme = "wss"
+	} else {
+		wsURL.Scheme = "ws"
+	}
+	dialer := websocket.Dialer{HandshakeTimeout: 8 * time.Second}
+	conn, _, err := dialer.DialContext(ctx, wsURL.String(), nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	_ = conn.SetWriteDeadline(time.Now().Add(8 * time.Second))
+	if err := conn.WriteJSON(map[string]any{
+		"id": 42, "method": "Target.closeTarget",
+		"params": map[string]string{"targetId": id},
+	}); err != nil {
+		return err
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(8 * time.Second))
+	for {
+		var response cdpResponse
+		if err := conn.ReadJSON(&response); err != nil {
 			return err
 		}
-		closeReq.Close = true
-		closeResp, err := client.Do(closeReq)
-		if err != nil {
+		if response.ID != 42 {
 			continue
 		}
-		_, _ = io.Copy(io.Discard, io.LimitReader(closeResp.Body, 2048))
-		closeResp.Body.Close()
-		// CloakBrowser's CDP relay intentionally exposes only the read-side
-		// /json endpoints. Failure to close a stale tab must never block OAuth.
+		if response.Error != nil {
+			return fmt.Errorf("CDP Target.closeTarget error %d", response.Error.Code)
+		}
+		return nil
 	}
-	return nil
 }
 
 func (b Browser) openViaHTTPNew(ctx context.Context, client *http.Client, base, authURL string) error {
@@ -102,6 +150,10 @@ func (b Browser) openViaHTTPNew(ctx context.Context, client *http.Client, base, 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("CDP new tab: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var target cdpTarget
+	if json.NewDecoder(io.LimitReader(resp.Body, 8192)).Decode(&target) == nil {
+		b.trackOwnedTarget(ctx, client, base, target.ID)
 	}
 	return nil
 }
@@ -186,6 +238,11 @@ func (b Browser) openViaWebSocket(ctx context.Context, client *http.Client, base
 		if response.Error != nil {
 			return fmt.Errorf("CDP Target.createTarget error %d: %s", response.Error.Code, response.Error.Message)
 		}
+		var target map[string]any
+		if json.Unmarshal(response.Result, &target) == nil {
+			id, _ := target["targetId"].(string)
+			b.trackOwnedTarget(ctx, client, base, id)
+		}
 		return nil
 	}
 }
@@ -214,9 +271,7 @@ func (b Browser) Open(ctx context.Context, authURL string) error {
 		client = &http.Client{Timeout: 12 * time.Second}
 	}
 
-	// Stale-tab cleanup is best-effort. It must never turn a recoverable OAuth
-	// flow into a failure, especially with relays that expose only /json/list.
-	_ = b.clearPageTargets(ctx, client, base)
+	// Existing user browser tabs must never be closed on OAuth startup.
 
 	var lastErr error
 	delays := []time.Duration{0, 500 * time.Millisecond, 1500 * time.Millisecond}
