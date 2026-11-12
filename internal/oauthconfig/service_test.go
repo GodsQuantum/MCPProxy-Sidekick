@@ -175,3 +175,39 @@ func TestEnsureRedirectURISupportsListServerShape(t *testing.T) {
 		t.Fatalf("redirect_uri=%v", oauth["redirect_uri"])
 	}
 }
+
+func TestEnsureCallbackBaseURLUsesNativeHTTPSOrigin(t *testing.T) {
+	b := &fakeBackend{doc: configFixture()}
+	service := Service{Backend: b}
+	changed, err := service.EnsureCallbackBaseURL(context.Background(), "google", "https://mcp.example.com")
+	if err != nil || !changed {
+		t.Fatalf("change=%v err=%v", changed, err)
+	}
+	oauth := b.doc["mcpServers"].(map[string]any)["google"].(map[string]any)["oauth"].(map[string]any)
+	if got := oauth["callback_base_url"]; got != "https://mcp.example.com" {
+		t.Fatalf("unexpected callback_base_url: %v", got)
+	}
+	changed, err = service.EnsureCallbackBaseURL(context.Background(), "google", "https://mcp.example.com")
+	if err != nil || changed {
+		t.Fatalf("not idempotent: changed=%v err=%v", changed, err)
+	}
+}
+
+func TestEnsureCallbackBaseURLSupportsListAndRejectsUnsafeOrigins(t *testing.T) {
+	service := Service{Backend: &fakeBackend{doc: listConfigFixture()}}
+	if _, err := service.EnsureCallbackBaseURL(context.Background(), "google", "https://mcp.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range []string{
+		"http://mcp.example.com",
+		"https://mcp.example.com/control/",
+		"https://user:pass@mcp.example.com",
+		"https://mcp.example.com?test=1",
+		"https://mcp.example.com/#fragment",
+		"javascript:alert(1)",
+	} {
+		if _, err := service.EnsureCallbackBaseURL(context.Background(), "google", input); err == nil {
+			t.Errorf("unsafe callback origin accepted: %q", input)
+		}
+	}
+}
