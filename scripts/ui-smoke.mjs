@@ -120,7 +120,14 @@ await evaluate("document.querySelector('#token-name').value='smoke-agent';docume
 await waitFor("document.querySelector('#one-token')?.value==='mcp_agt_smoke_once'","one-time agent token missing");
 assert(await evaluate("document.querySelector('#one-time-snippet')?.value.includes('/mcp/p/personal') && document.querySelector('#one-time-snippet')?.value.includes('Authorization')"),"n8n onboarding snippet missing");
 await evaluate("document.querySelector('.modal-close').click();openCredential('github');true");
-assert(await evaluate("!!document.querySelector('#credential-form')"),"credential form missing");
+await waitFor("!!document.querySelector('#credential-form')","credential form missing");
+assert(await evaluate("document.querySelector('#cred-mode').value==='bearer'"),"HTTP credential should default to configured Bearer");
+await evaluate("document.querySelector('.modal-close').click();true");
+await evaluate("openCredential('ebay-api');true");
+await waitFor("!!document.querySelector('#credential-form [data-env-name=EBAY_CLIENT_ID]')","eBay ID field missing");
+assert(await evaluate("!!document.querySelector('#credential-form input[data-env-name=EBAY_CLIENT_SECRET][type=password]')"),"eBay secret field missing or not masked");
+assert(await evaluate("!document.querySelector('#credential-form #cred-mode')"),"eBay must not show HTTP auth selector");
+
 await evaluate("document.querySelector('.modal-close').click();true");
 
 // Regression: status filters, direct OAuth links and guided profile setup.

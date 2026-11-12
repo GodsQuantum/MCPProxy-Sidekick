@@ -86,6 +86,28 @@ Some MCPs need a different shape. Sidekick includes adapters for:
 
 Optional adapter endpoints are configured through <code>.env</code>; private values never belong in Git.
 
+### Credential forms by connection type
+
+The Connections / Configure credentials action detects credential shape from the live
+MCPProxy configuration, instead of requiring one generic HTTP token for every upstream:
+
+- OAuth: native MCPProxy sign-in; no API-key textbox.
+- HTTP with headers: Bearer, X-API-Key, or the pre-existing custom header.
+- Stdio with credential environment variables: one labeled input per field, applied through
+  MCPProxy's native per-upstream PATCH endpoint using merge semantics.
+- Stdio without credential variables: explicit no-credential explanation.
+- Special adapters: existing integrations are preserved (Crypto.com, Paperless, Immich,
+  Postiz, OpenAlex fallback).
+
+The eBay public API MCP (ebay-api) provides distinct Client ID and Client Secret inputs.
+An approved eBay Developer account and issued credentials are still required; the
+interface cannot generate them. The official eBay public MCP currently permits production
+GET calls but not listing modifications. Credential values never appear in the returned
+form schema or in Sidekick's credential-save response.
+
+For already-connected public remote MCPs, the UI does not request a generic API key.
+Credential updates are intentional user submissions and never bulk overwrite other MCPs.
+
 ### OAuth (MCPProxy native remote sign-in)
 
 MCPProxy Server owns OAuth authorization, PKCE, state, refresh tokens, stored credentials, and trust/quarantine decisions. Sidekick is a **browser and administration front-end**, not a second OAuth server. It does not rewrite an upstream's credentials or the whole MCPProxy configuration when a user clicks **Connect**.

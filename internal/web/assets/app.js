@@ -230,10 +230,12 @@ function isExpectedOffline(c){
 function connectionCard(c){
   const memberships=(c.profiles||[]).join(", ")||"Unassigned";
   const offline=isExpectedOffline(c);
-  const auth=c.oauth?"OAuth":(c.credential_configured?"API credential":"No auth detected");
+  const auth=c.oauth?"OAuth":(c.name==="ebay-api"?"Client ID + Client Secret":(c.credential_configured?"API credential":c.protocol==="stdio"?"Local MCP":"No auth detected"));
   let quick=c.oauth
     ?'<button class="secondary oauth-native" data-name="'+esc(c.name)+'">'+(c.authenticated?"Reconnexion OAuth":"Connexion OAuth")+'</button><button class="ghost oauth-copy" data-name="'+esc(c.name)+'" title="Copy MCPProxy native sign-in URL">Copy link</button><button class="secondary oauth-start" data-name="'+esc(c.name)+'">CloakBrowser</button>'
-    :'<button class="secondary credential-open" data-name="'+esc(c.name)+'">Set credential</button>';
+    : ((c.protocol==="stdio"&&c.name!=="ebay-api")||(c.ready&&!c.credential_configured))
+      ? ""
+      : '<button class="secondary credential-open" data-name="'+esc(c.name)+'">Configure credentials</button>';
   return '<article class="server-card connection-card" data-name="'+esc(c.name)+'">'+
     '<div class="server-top"><div><h3>'+esc(c.name)+'</h3><span class="muted">'+esc(memberships)+'</span></div>'+(offline?'<span class="badge">Expected offline</span>':badge(c.status,c.enabled,c.quarantined))+'</div>'+
     '<div class="server-meta"><span>'+esc(auth)+' · '+esc(c.protocol||"MCP")+'</span><strong>'+esc(c.tool_count||0)+' tools</strong></div>'+
@@ -274,7 +276,7 @@ async function openConnection(name,opener){
       '<div class="connection-hero"><div>'+badge(c.status,c.enabled,c.quarantined)+'</div><strong>'+esc(c.tool_count||0)+' tools</strong></div>'+
       '<dl class="detail-grid"><div><dt>Authentication</dt><dd>'+esc(c.oauth?"OAuth":(c.credential_configured?"Credential":"Not configured"))+'</dd></div><div><dt>Profiles</dt><dd class="chips">'+profiles+'</dd></div></dl>'+
       oauth+
-      '<div class="card-actions">'+actions+(c.oauth?"":'<button type="button" class="secondary credential-open" data-name="'+esc(c.name)+'">Replace credential</button>')+'</div>'+
+      '<div class="card-actions">'+actions+(c.oauth||c.protocol==="stdio"&&c.name!=="ebay-api"?"":'<button type="button" class="secondary credential-open" data-name="'+esc(c.name)+'">Configure credentials</button>')+'</div>'+
       '<details><summary>Advanced</summary><dl class="detail-grid"><div><dt>Protocol</dt><dd>'+esc(c.protocol||"MCP")+'</dd></div><div><dt>Endpoint</dt><dd class="mono">'+esc(c.url||"Managed by MCPProxy")+'</dd></div></dl></details>',
       opener
     );
@@ -424,50 +426,89 @@ async function startOAuth(name){
   }
 }
 
-function openCredential(name,opener){
+
+async function openCredential(name,opener){
+  let schema;
+  try{
+    schema=await api("/api/upstreams/"+encodeURIComponent(name)+"/credential/schema");
+  }catch(e){toast("Credential configuration unavailable: "+e.message);return}
   const isOpenAlex=name==="openalex-github";
-  const isCryptoApp=name==="cryptocom-app";
-  const isCryptoExchange=name==="cryptocom-exchange";
-  const isCryptoPrivate=isCryptoApp||isCryptoExchange;
-  if(name==="cryptocom-market"||name==="cryptocom-paper"){
-    toast(name==="cryptocom-market"?"Crypto.com Market Data is public and needs no private credential.":"Crypto.com Paper is local simulation and needs no Crypto.com credential.");
+  const isCryptoPrivate=name==="cryptocom-app"||name==="cryptocom-exchange";
+  if(schema.kind==="oauth"){
+    toast("This MCP uses OAuth. Open its native sign-in.");
+    openNativeOAuth(name);
     return;
   }
-  const authFields=isOpenAlex
-    ? '<p class="muted">OpenAlex GitHub is an optional local fallback. Paste the OpenAlex API key here; Sidekick stores it in a local 0600 secret file. Saving the key does not enable this connection.</p><label>OpenAlex API key<input id="cred-value" type="password" autocomplete="off" required></label>'
+  if(schema.kind==="none"||schema.kind==="unavailable"){
+    openModal('<h2 id="modal-title">'+esc(name)+'</h2><p class="muted">'+esc(schema.hint||"No credential is required or configured for this MCP.")+'</p>',opener);
+    return;
+  }
+  if(name==="cryptocom-market"||name==="cryptocom-paper"){
+    toast("This Crypto.com connection does not require a private credential.");
+    return;
+  }
+  const envMode=schema.kind==="env";
+  const help='<p class="muted">'+esc(schema.hint||"Credentials are transmitted once to MCPProxy and not displayed again.")+'</p>';
+  const fields=envMode
+    ? (schema.fields||[]).map((field,i)=>
+      '<label for="cred-env-'+i+'">'+esc(field.label||field.name)+
+      '<input id="cred-env-'+i+'" data-env-name="'+esc(field.name)+'" type="'+(field.secret?"password":"text")+
+      '" autocomplete="off" spellcheck="false" '+(field.required?"required":"")+'></label>').join("")
+    : isOpenAlex
+      ? '<label>OpenAlex API key<input id="cred-value" type="password" autocomplete="off" required></label>'
     : isCryptoPrivate
-      ? '<p class="muted">'+(isCryptoApp
-          ? 'Crypto.com App Agent Key: use the key and secret generated in the Crypto.com mobile App. This connection reads the Main App portfolio and supports quote-based crypto trading APIs.'
-          : 'Crypto.com Exchange API: use the key and secret generated on exchange.crypto.com. This connection sees only the dedicated Exchange account/order book, separate from the Main App.')+' Sidekick installs the pair into its own 0600 credential file and restarts only this target service. The secret is never stored in Sidekick metadata.</p><label>Crypto.com '+(isCryptoApp?'App Agent':'Exchange')+' API key<input id="cred-value" type="password" autocomplete="off" required></label><label>Crypto.com API secret<input id="cred-secret" type="password" autocomplete="off" required></label><label>Credential lifetime (days)<input id="cred-expiry-days" type="number" min="1" max="365" value="90" required></label>'
-      : '<p class="muted">The full secret is submitted once and is not returned by Sidekick afterward.</p><label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label><label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label><label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label>';
-  const submitLabel=isOpenAlex?"Save / replace API key (keep disabled)":isCryptoPrivate?"SET credentials":"Save / replace & enable";
-  openModal('<h2 id="modal-title">Credential · '+esc(name)+'</h2><form id="credential-form" class="form-grid">'+authFields+'<div class="card-actions"><button class="secondary" id="credential-paste" type="button">Paste from clipboard</button><button class="ghost" id="credential-toggle-visibility" type="button">Show / hide</button></div><button class="primary" type="submit">'+submitLabel+'</button></form>',opener);
+      ? '<label>Crypto.com API key<input id="cred-value" type="password" autocomplete="off" required></label>'+
+        '<label>Crypto.com API secret<input id="cred-secret" type="password" autocomplete="off" required></label>'+
+        '<label>Credential lifetime (days)<input id="cred-expiry-days" type="number" min="1" max="365" value="90" required></label>'
+    : '<label>Authentication format<select id="cred-mode"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">X-API-Key</option><option value="custom-header">Custom header</option></select></label>'+
+      '<label id="header-label" hidden>Header name<input id="cred-header" placeholder="X-Custom-Key"></label>'+
+      '<label>API key / token<input id="cred-value" type="password" autocomplete="off" required></label>';
+  const submitLabel=isOpenAlex?"Save key (keep disabled)":envMode?"Save credentials & enable":isCryptoPrivate?"SET credentials":"Save / replace & enable";
+  openModal('<h2 id="modal-title">Credentials · '+esc(name)+'</h2><form id="credential-form" class="form-grid">'+help+fields+
+    '<div class="card-actions"><button class="secondary" id="credential-paste" type="button">Paste into first field</button>'+
+    '<button class="ghost" id="credential-toggle-visibility" type="button">Show / hide</button></div>'+
+    '<button class="primary" type="submit">'+submitLabel+'</button></form>',opener);
+  const envFields=Array.from(document.querySelectorAll("#credential-form [data-env-name]"));
+    if(!envMode&&!isOpenAlex&&!isCryptoPrivate){
+    const mode=$("#cred-mode"),header=$("#cred-header");
+    mode.value=["bearer","x-api-key","custom-header"].includes(schema.default_mode)?schema.default_mode:"bearer";
+    header.value=schema.default_header||"";
+    const updateMode=()=>{$("#header-label").hidden=mode.value!=="custom-header";header.required=mode.value==="custom-header"};
+    mode.onchange=updateMode;updateMode();
+  }
   $("#credential-paste").onclick=async()=>{
     try{
       if(!navigator.clipboard?.readText)throw new Error("Unavailable");
       const value=await navigator.clipboard.readText();
       if(!value)throw new Error("Clipboard empty");
-      $("#cred-value").value=value.trim();
-      $("#cred-value").focus();
-      toast("Credential pasted locally. Check it, then save explicitly.");
-    }catch{toast("Clipboard access denied. Use Ctrl+V in the credential field.")}
+      const field=envMode?envFields[0]:$("#cred-value");
+      if(!field)return;
+      field.value=value.trim();
+      field.focus();
+      toast("Pasted locally. Fill remaining fields and save.");
+    }catch{toast("Clipboard unavailable. Use Ctrl+V in a field.")}
   };
   $("#credential-toggle-visibility").onclick=()=>{
-    const fields=[$("#cred-value"),$("#cred-secret")].filter(Boolean);
-    const type=fields[0].type==="password"?"text":"password";
-    fields.forEach(field=>{field.type=type});
+    const inputs=envMode?envFields:[$("#cred-value"),$("#cred-secret")].filter(Boolean);
+    const reveal=inputs.some(x=>x.type==="password");
+    inputs.forEach(x=>{x.type=reveal?"text":(x.dataset.envName&&schema.fields?.find(y=>y.name===x.dataset.envName)?.secret?"password":envMode?"text":"password")});
   };
-  if(!isOpenAlex&&!isCryptoPrivate)$("#cred-mode").onchange=e=>{$("#header-label").hidden=e.target.value!=="custom-header"};
   $("#credential-form").onsubmit=async e=>{
     e.preventDefault();
+    let payload;
+    if(envMode){
+      const values=Object.fromEntries(envFields.map(f=>[f.dataset.envName,f.value.trim()]));
+      payload={mode:"stdio-env",values};
+    }else if(isOpenAlex){
+      payload={mode:"openalex-api-key",value:$("#cred-value").value};
+    }else if(isCryptoPrivate){
+      payload={mode:"cryptocom-api-pair",value:$("#cred-value").value,secret:$("#cred-secret").value,expires_days:Number($("#cred-expiry-days").value||90)};
+    }else{
+      payload={mode:$("#cred-mode").value,header_name:$("#cred-header").value,value:$("#cred-value").value};
+    }
     try{
-      const payload=isOpenAlex
-        ? {mode:"openalex-api-key",header_name:"",value:$("#cred-value").value}
-        : isCryptoPrivate
-          ? {mode:"cryptocom-api-pair",value:$("#cred-value").value,secret:$("#cred-secret").value,expires_days:Number($("#cred-expiry-days").value||90)}
-          : {mode:$("#cred-mode").value,header_name:$("#cred-header").value,value:$("#cred-value").value};
       await api("/api/upstreams/"+encodeURIComponent(name)+"/credential",{method:"POST",body:JSON.stringify(payload)});
-      closeModal(); toast(name+" credential updated"); await load();
+      closeModal();toast(name+" credentials updated");await load();
     }catch(err){toast(err.message)}
   };
 }
