@@ -33,6 +33,8 @@ Operational details, browser switching and rollback are documented in [Sidekick 
 - **Bitwarden-ready** — optional official managed extension policy, including a self-hosted HTTPS vault base URL, without storing vault secrets in Sidekick.
 - **Profiles and Agents** — native MCPProxy Profiles, capability-gated newer policy controls, and profile-pinned Agent Tokens through a Give to an agent flow.
 - **Live operational state** — authenticated SSE with payload redaction, reconnect backoff and visibility-aware polling fallback.
+- **Required-tools preflight (MCPProxy v0.75+)** — operator-initiated checks for `server:tool` dependencies and an optional Profile/read-only policy, using MCPProxy's native `POST /api/v1/preflight`. No upstream calls, duplicate monitors or unconditional polling; the proxy records an audit entry.
+- **Upstream Skills (MCPProxy v0.75+)** — direct access to the native Skills and Review UI, without bypassing scan/approval or maintaining a duplicate skill catalog. Turn on `enable_skills` in MCPProxy only after reviewing the security impact and eligible upstreams.
 - **Special adapters where generic auth is not enough** — Postiz URL keys, Paperless identity aliases, per-process Immich keys, optional `openalex-github` API-key files that stay disabled after credential writes, upstream-managed YouTube OAuth, and opt-in secure credential handoff for deployment-defined Crypto.com/Dify integrations.
 - **Small trust surface** — no Docker socket, no public CDP, no CDN JavaScript, read-only root filesystem and dropped Linux capabilities.
 
@@ -133,6 +135,12 @@ Family member
 Profiles are **native MCPProxy v0.69.0+ profiles**. Sidekick reads them from `GET /api/v1/profiles` and applies membership changes through MCPProxy's configuration API; it does not keep a second profile catalog in SQLite. Native routes are `/mcp/p/<name>`.
 
 **Upgrade note from Sidekick ≤ v0.1.8:** legacy SQLite profile tables are no longer a runtime source of truth. They are left untouched rather than silently deleted. Recreate any legacy-only profile in MCPProxy before removing an old Sidekick database.
+
+## 🩺 Tool-readiness preflight and upstream Skills
+
+In **Activity & Security**, open **Required-tools preflight**. Enter one `server:tool` identifier per line (up to 16), optionally select a native MCPProxy Profile and enable **Require read-only tools only**, then choose **Check readiness**. The result reports native verdicts (`ready`, `degraded_retryable`, `blocked`), per-tool reasons and remediation hints. **Preflight is not a tool invocation guarantee** and does not invoke any upstream: it reads MCPProxy's local tool index, trust/approval records and connection snapshot. Each explicit check is recorded in MCPProxy's activity history. This feature is capability-gated: older MCPProxy servers report *unsupported*, without a mock successful result.
+
+The **Skills over MCP** panel links to MCPProxy's **native** Skills/Review interface. MCPProxy Server 0.75.0 introduces the `io.modelcontextprotocol/skills` extension and agent-facing `retrieve_skills`, `load_skill`, `read_skill_file` tools for approved upstream skills. The feature **defaults to disabled** (`enable_skills: false`). To protect operator-owned skill content, use MCPProxy's native review/approval and per-server `expose_skills: false` boundaries; Sidekick does not auto-approve or republish upstream instruction files. See the [official feature guide](https://docs.mcpproxy.app/features/skills/).
 
 ## 🪪 Agent Tokens
 

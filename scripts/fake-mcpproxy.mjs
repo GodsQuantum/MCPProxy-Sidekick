@@ -39,6 +39,20 @@ const server=http.createServer(async(req,res)=>{
       req.on("close",()=>clearInterval(timer));
       return;
     }
+    if(req.method==="POST" && url.pathname==="/api/v1/preflight"){
+      if(req.headers["x-api-key"]!=="admin-key")return json(res,401,{error:"unauthorized"});
+      const body=await readBody(req);
+      if(body.profile!=="personal" || body.policy?.read_only_only!==true ||
+         body.tools?.length!==2 ||
+         body.tools[0]?.id!=="github:search_code" || body.tools[1]?.id!=="render:export")
+        return json(res,400,{error:"unexpected preflight fixture"});
+      return json(res,200,{success:true,data:{
+        verdict:"degraded_retryable",checked_at:"2026-11-22T00:00:00Z",
+        tools:[{id:"github:search_code",status:"ready",hash:"sha256/v5:fake"},
+          {id:"render:export",status:"unavailable",reason:"server_unhealthy",
+            retryable:true,remediation:"Start render node"}],
+      }});
+    }
     if(req.method==="GET" && url.pathname==="/api/v1/servers")
       return json(res,200,{success:true,data:{servers}});
     if(req.method==="GET" && url.pathname==="/api/v1/profiles")

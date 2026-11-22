@@ -122,3 +122,17 @@ textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 65%,tra
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 .panel pre{overflow:auto;background:#080b10;color:#d7e5f7;border:1px solid var(--line);border-radius:13px;padding:14px}
 @media(max-width:860px){.settings-grid,.detail-grid{grid-template-columns:1fr}}
+
+/* Native MCPProxy tool preflight: operator-triggered, no background polling. */
+.tool-preflight{display:grid;gap:10px;margin-bottom:14px}
+.tool-preflight label{display:grid;gap:6px}
+.tool-preflight textarea{width:100%;min-height:5rem;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;color:var(--text);font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+.tool-preflight textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 65%,transparent);outline-offset:2px}
+.tool-preflight select{width:min(440px,100%)}
+.preflight-checkbox{display:flex!important;flex-direction:row;align-items:center;gap:9px}
+.preflight-checkbox input{accent-color:var(--accent);width:17px;height:17px}
+.preflight-result{overflow-wrap:anywhere}
+.preflight-list{padding:0;margin:12px 0 0;list-style:none;display:grid;gap:8px}
+.preflight-list li{padding:10px;border:1px solid var(--line);border-radius:11px;display:flex;align-items:baseline;flex-wrap:wrap;gap:7px}
+.preflight-list li strong{min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.preflight-list li p{flex:1 0 100%;margin:0;color:var(--muted);font-size:12px}

@@ -169,6 +169,18 @@ jobs:
               *) cat "$response"; exit 1 ;;
             esac
           done
+          # MCPProxy 0.75+ checks required tools without contacting the upstream.
+          # An absent tool still yields HTTP 200 and a blocked verdict, not an
+          # authorization or transport error. This checks the native REST shape.
+          code="$(curl -sS -o "$response" -w '%{http_code}' \
+            -H "X-API-Key: $MCPPROXY_TEST_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"tools":[{"id":"fixture:not-installed"}]}' \
+            "http://127.0.0.1:19080/api/v1/preflight")"
+          if [[ "$code" != "200" ]] || ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); v=d.get("data",d); assert v.get("verdict") and len(v.get("tools",[]))==1; assert v["tools"][0]["id"]=="fixture:not-installed"; print("MCPPROXY_NATIVE_PREFLIGHT_CONTRACT_PASS")' "$response"; then
+            cat "$response"
+            exit 1
+          fi
           # MCPProxy 0.73+ requires an explicit caller scope and an upstream
           # tool for access/explain; calling it empty is *expected* HTTP 400.
           # Assert this validation contract, never mistake it for a 5xx outage.

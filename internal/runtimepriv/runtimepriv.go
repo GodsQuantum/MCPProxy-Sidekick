@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 type Target struct{ UID, GID int }
@@ -28,26 +27,4 @@ func FromEnv() (*Target, error) {
 		return nil, fmt.Errorf("invalid SIDEKICK_DROP_GID")
 	}
 	return &Target{UID: uid, GID: gid}, nil
-}
-
-func Drop(t *Target) error {
-	if t == nil {
-		return nil
-	}
-	if os.Geteuid() != 0 {
-		return fmt.Errorf("privilege drop requested but process is not root")
-	}
-	if err := syscall.Setgroups([]int{}); err != nil {
-		return fmt.Errorf("clear supplementary groups: %w", err)
-	}
-	if err := syscall.Setgid(t.GID); err != nil {
-		return fmt.Errorf("setgid: %w", err)
-	}
-	if err := syscall.Setuid(t.UID); err != nil {
-		return fmt.Errorf("setuid: %w", err)
-	}
-	if os.Geteuid() != t.UID || os.Getegid() != t.GID {
-		return fmt.Errorf("privilege drop verification failed")
-	}
-	return nil
 }
