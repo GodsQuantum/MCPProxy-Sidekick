@@ -7,7 +7,7 @@
   <meta name="sidekick-mount-path" content="__SIDEKICK_MOUNT_PATH__">
   <title>MCPProxy Sidekick</title>
   <link rel="icon" href="./static/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./static/app.css">
+  <link rel="stylesheet" href="./static/app.css?v=20261122-preflight">
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -94,6 +94,22 @@
 
       <section id="view-activity" class="view" aria-labelledby="view-title">
         <div class="section-head"><div><h2>Activity &amp; Security</h2><p>Operational attention, trust boundaries and authentication health.</p></div></div>
+        <article class="panel tool-preflight">
+          <h3>Required-tools preflight</h3>
+          <p>Check MCPProxy's native tool and profile readiness before starting an agent. No upstream calls are made; MCPProxy records the check in its activity log.</p>
+          <label for="preflight-tools">Required tool IDs (one server:tool per line, up to 16)</label>
+          <textarea id="preflight-tools" rows="3" spellcheck="false" placeholder="example-server:example-tool"></textarea>
+          <label for="preflight-profile">Profile to check</label>
+          <select id="preflight-profile"><option value="">Default operator view</option></select>
+          <label class="preflight-checkbox"><input id="preflight-readonly" type="checkbox"> Require read-only tools only</label>
+          <div class="card-actions"><button type="button" class="primary" id="preflight-run">Check readiness</button></div>
+          <div id="preflight-result" role="status" aria-live="polite" class="preflight-result muted">No check performed.</div>
+        </article>
+        <article class="panel">
+          <h3>Skills over MCP</h3>
+          <p>MCPProxy v0.75+ can expose approved upstream skills to compatible agents. Review the content and approval status in MCPProxy's native UI. Sidekick never bypasses this approval gate.</p>
+          <p><a href="/ui/" target="_blank" rel="noopener noreferrer">Open MCPProxy native Skills and Review interface</a></p>
+        </article>
         <div id="activity-list" class="stack"></div>
         <div class="security-grid activity-security">
           <article class="panel"><h3>Secret handling</h3><p>Full credentials are never returned by Sidekick after submission. Only safe masked metadata is rendered.</p></article>
@@ -125,6 +141,6 @@ docker compose up -d</code></pre>
     </div>
   </dialog>
 
-  <script src="./static/app.js?v=20261007-dual-crypto" defer></script>
+  <script src="./static/app.js?v=20261122-preflight" defer></script>
 </body>
 </html>

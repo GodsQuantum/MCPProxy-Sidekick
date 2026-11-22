@@ -75,6 +75,12 @@ await waitFor("document.querySelector('#refresh-state')?.dataset.mode==='sse' &&
 assert(await evaluate("!document.body.innerText.includes('SUPER_SECRET_SSE_SMOKE')"),"raw MCPProxy SSE payload leaked into the UI");
 await evaluate("document.querySelector('.nav-item[data-view=\"activity\"]').click();true");
 await waitFor("document.querySelector('#activity-list')?.innerText.includes('servers.changed')","normalized SSE activity did not render");
+assert(await evaluate("document.querySelector('#preflight-result')?.innerText.includes('No check performed.')"),"Preflight should not run automatically");
+assert(await evaluate("Array.from(document.querySelector('#preflight-profile').options).some(x=>x.value==='personal')"),"Existing MCPProxy profiles not loaded into preflight");
+await evaluate("(()=>{document.querySelector('#preflight-tools').value="+JSON.stringify("github:search_code\nrender:export")+";document.querySelector('#preflight-profile').value='personal';document.querySelector('#preflight-readonly').checked=true;document.querySelector('#preflight-run').click();return true})()");
+await waitFor("document.querySelector('#preflight-result')?.innerText.includes('degraded_retryable')","Native preflight verdict was not displayed");
+assert(await evaluate("(()=>{const s=document.querySelector('#preflight-result').innerText;return s.includes('github:search_code')&&s.includes('render:export')&&s.includes('Start render node')&&s.includes('Retryable')})()"),"Preflight result details missing");
+assert(await evaluate("document.querySelector('#preflight-run').disabled===false"),"Preflight button was not released");
 const navText=await evaluate("Array.from(document.querySelectorAll('#nav .nav-item')).map(x=>x.textContent.trim()).join('|')");
 assert(navText==="Overview|Connections|Profiles|Agents|Activity & Security|Settings","unexpected V2 navigation: "+navText);
 await evaluate("document.querySelector('.nav-item[data-view=\"connections\"]').click();true");

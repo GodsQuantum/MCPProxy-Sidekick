@@ -200,6 +200,7 @@ function render(){
   renderTokens();
   renderAttention();
   renderSettings();
+  renderPreflightProfiles();
 }
 
 function renderSummary(){
@@ -317,6 +318,48 @@ function renderAttention(){
   if($("#activity-list"))$("#activity-list").innerHTML=
     (eventHtml?'<div class="stack">'+eventHtml+'</div>':'<div class="empty">No recent MCPProxy activity.</div>')+
     '<div class="section-head activity-subhead"><div><h3>Needs attention</h3></div></div>'+attentionHtml;
+}
+
+function renderPreflightProfiles(){
+  const select=$("#preflight-profile"); if(!select)return;
+  const selected=select.value;
+  const profiles=(state.data?.profiles||[]).filter(x=>x&&typeof x.name==="string");
+  select.innerHTML='<option value="">Default operator view</option>'+
+    profiles.map(p=>'<option value="'+esc(p.name)+'">'+esc(p.name)+'</option>').join("");
+  if(profiles.some(p=>p.name===selected))select.value=selected;
+}
+
+async function runToolPreflight(){
+  const out=$("#preflight-result"),button=$("#preflight-run");
+  const ids=[...new Set(($("#preflight-tools").value||"").split(/[,\n]/).map(x=>x.trim()).filter(Boolean))];
+  if(!ids.length||ids.length>16){
+    out.textContent="Enter 1 to 16 tool IDs, one server:tool per line.";
+    return;
+  }
+  button.disabled=true;
+  button.setAttribute("aria-busy","true");
+  out.textContent="Checking MCPProxy readiness…";
+  try{
+    const selected=$("#preflight-profile").value;
+    const req={tools:ids.map(id=>({id}))};
+    if(selected)req.profile=selected;
+    if($("#preflight-readonly").checked)req.policy={read_only_only:true};
+    const data=await api("/api/preflight",{method:"POST",body:JSON.stringify(req)});
+    const status=String(data.verdict||"unknown");
+    const items=(data.tools||[]).map(item=>{
+      const reason=[item.reason||"",item.remediation||"",item.retryable?"Retryable":""].filter(Boolean).map(esc).join(" · ");
+      const css=item.status==="ready"?"good":(item.retryable?"warn":"bad");
+      return '<li><strong>'+esc(item.id)+'</strong><span class="badge '+css+'">'+esc(item.status||"unknown")+'</span>'+
+        (reason?'<p>'+reason+'</p>':"")+'</li>';
+    }).join("");
+    out.innerHTML='<p><strong>Verdict: '+esc(status)+'</strong>'+(selected?' · '+esc(selected):"")+'</p>'+
+      '<ul class="preflight-list">'+items+'</ul>';
+  }catch(e){
+    out.textContent=e.status===501?"This MCPProxy version does not support native tool preflight.":String(e.message||"Check unavailable");
+  }finally{
+    button.disabled=false;
+    button.removeAttribute("aria-busy");
+  }
 }
 
 function renderSettings(){
@@ -595,6 +638,7 @@ $("#refresh").onclick=()=>load({allowEventStart:true});
 $("#connection-search").oninput=renderConnections;
 $("#new-profile").onclick=openNewProfile;
 $("#new-token").onclick=openToken;
+$("#preflight-run").onclick=runToolPreflight;
 $(".modal-close").onclick=closeModal;
 $("#modal").addEventListener("click",e=>{if(e.target===$("#modal"))closeModal()});
 $$(".nav-item").forEach(b=>b.onclick=()=>switchView(b.dataset.view));

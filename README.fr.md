@@ -123,3 +123,10 @@ podman build -t mcpproxy-sidekick:dev .
 ## 📄 Licence
 
 [MIT](LICENSE)
+
+
+## Contrôle natif des outils et skills (MCPProxy 0.75+)
+
+Dans **Activity & Security**, le bouton **Check readiness** évalue, à la demande, jusqu’à 16 outils MCP `serveur:outil`, le profil MCPProxy sélectionné et éventuellement la contrainte **lecture seule**. Il appelle uniquement la fonctionnalité native `POST /api/v1/preflight` (sans appel d'outil distant) et présente les raisons des indisponibilités, les possibilités de réessai et les remédiations. MCPProxy journalise cette vérification. Aucun timer ou serveur de contrôle supplémentaire n’est ajouté.
+
+Le panneau **Skills over MCP** ouvre l’interface native MCPProxy de consultation, comparaison et approbation des skills amont. MCPProxy 0.75 introduit cette distribution vers les agents qui le prennent en charge, **désactivée par défaut** (`enable_skills: false`). Sidekick n’approuve jamais un skill implicitement et ne crée pas de deuxième catalogue. Voir [la documentation officielle](https://docs.mcpproxy.app/features/skills/).

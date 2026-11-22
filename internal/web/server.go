@@ -58,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /auth/check", s.handleAuthCheck)
 	mux.HandleFunc("GET /api/state", s.requireSession(s.handleState))
 	mux.HandleFunc("GET /api/events", s.requireSession(s.handleEvents))
+	mux.HandleFunc("POST /api/preflight", s.requireSession(s.requireMutation(s.handleToolPreflight)))
 	mux.HandleFunc("GET /api/browser/open", s.requireSession(s.handleBrowserOpen))
 	mux.HandleFunc("POST /api/settings/browser-instance", s.requireSession(s.requireMutation(s.handleBrowserInstanceUpdate)))
 	mux.HandleFunc("GET /api/connections", s.requireSession(s.handleConnections))
